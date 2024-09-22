@@ -1,24 +1,5 @@
-# Copyright (C) Dnspython Contributors, see LICENSE for text of ISC license
-
-# Copyright (C) 2003-2017 Nominum, Inc.
-#
-# Permission to use, copy, modify, and distribute this software and its
-# documentation for any purpose with or without fee is hereby granted,
-# provided that the above copyright notice and this permission notice
-# appear in all copies.
-#
-# THE SOFTWARE IS PROVIDED "AS IS" AND NOMINUM DISCLAIMS ALL WARRANTIES
-# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL NOMINUM BE LIABLE FOR
-# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
-# OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 """DNS RRsets (an RRset is a named rdataset)"""
-
 from typing import Any, Collection, Dict, Optional, Union, cast
-
 import dns.name
 import dns.rdataclass
 import dns.rdataset
@@ -34,51 +15,29 @@ class RRset(dns.rdataset.Rdataset):
     arguments, reflecting the fact that RRsets always have an owner
     name.
     """
+    __slots__ = ['name', 'deleting']
 
-    __slots__ = ["name", "deleting"]
-
-    def __init__(
-        self,
-        name: dns.name.Name,
-        rdclass: dns.rdataclass.RdataClass,
-        rdtype: dns.rdatatype.RdataType,
-        covers: dns.rdatatype.RdataType = dns.rdatatype.NONE,
-        deleting: Optional[dns.rdataclass.RdataClass] = None,
-    ):
+    def __init__(self, name: dns.name.Name, rdclass: dns.rdataclass.
+        RdataClass, rdtype: dns.rdatatype.RdataType, covers: dns.rdatatype.
+        RdataType=dns.rdatatype.NONE, deleting: Optional[dns.rdataclass.
+        RdataClass]=None):
         """Create a new RRset."""
-
         super().__init__(rdclass, rdtype, covers)
         self.name = name
         self.deleting = deleting
 
-    def _clone(self):
-        obj = super()._clone()
-        obj.name = self.name
-        obj.deleting = self.deleting
-        return obj
-
     def __repr__(self):
         if self.covers == 0:
-            ctext = ""
+            ctext = ''
         else:
-            ctext = "(" + dns.rdatatype.to_text(self.covers) + ")"
+            ctext = '(' + dns.rdatatype.to_text(self.covers) + ')'
         if self.deleting is not None:
-            dtext = " delete=" + dns.rdataclass.to_text(self.deleting)
+            dtext = ' delete=' + dns.rdataclass.to_text(self.deleting)
         else:
-            dtext = ""
-        return (
-            "<DNS "
-            + str(self.name)
-            + " "
-            + dns.rdataclass.to_text(self.rdclass)
-            + " "
-            + dns.rdatatype.to_text(self.rdtype)
-            + ctext
-            + dtext
-            + " RRset: "
-            + self._rdata_repr()
-            + ">"
-        )
+            dtext = ''
+        return '<DNS ' + str(self.name) + ' ' + dns.rdataclass.to_text(self
+            .rdclass) + ' ' + dns.rdatatype.to_text(self.rdtype
+            ) + ctext + dtext + ' RRset: ' + self._rdata_repr() + '>'
 
     def __str__(self):
         return self.to_text()
@@ -91,7 +50,7 @@ class RRset(dns.rdataset.Rdataset):
             return False
         return super().__eq__(other)
 
-    def match(self, *args: Any, **kwargs: Any) -> bool:  # type: ignore[override]
+    def match(self, *args: Any, **kwargs: Any) ->bool:
         """Does this rrset match the specified attributes?
 
         Behaves as :py:func:`full_match()` if the first argument is a
@@ -103,36 +62,18 @@ class RRset(dns.rdataset.Rdataset):
         makes RRsets matchable as Rdatasets while preserving backwards
         compatibility.)
         """
-        if isinstance(args[0], dns.name.Name):
-            return self.full_match(*args, **kwargs)  # type: ignore[arg-type]
-        else:
-            return super().match(*args, **kwargs)  # type: ignore[arg-type]
+        pass
 
-    def full_match(
-        self,
-        name: dns.name.Name,
-        rdclass: dns.rdataclass.RdataClass,
-        rdtype: dns.rdatatype.RdataType,
-        covers: dns.rdatatype.RdataType,
-        deleting: Optional[dns.rdataclass.RdataClass] = None,
-    ) -> bool:
+    def full_match(self, name: dns.name.Name, rdclass: dns.rdataclass.
+        RdataClass, rdtype: dns.rdatatype.RdataType, covers: dns.rdatatype.
+        RdataType, deleting: Optional[dns.rdataclass.RdataClass]=None) ->bool:
         """Returns ``True`` if this rrset matches the specified name, class,
         type, covers, and deletion state.
         """
-        if not super().match(rdclass, rdtype, covers):
-            return False
-        if self.name != name or self.deleting != deleting:
-            return False
-        return True
+        pass
 
-    # pylint: disable=arguments-differ
-
-    def to_text(  # type: ignore[override]
-        self,
-        origin: Optional[dns.name.Name] = None,
-        relativize: bool = True,
-        **kw: Dict[str, Any],
-    ) -> str:
+    def to_text(self, origin: Optional[dns.name.Name]=None, relativize:
+        bool=True, **kw: Dict[str, Any]) ->str:
         """Convert the RRset into DNS zone file format.
 
         See ``dns.name.Name.choose_relativity`` for more information
@@ -148,18 +89,11 @@ class RRset(dns.rdataset.Rdataset):
         *relativize*, a ``bool``.  If ``True``, names will be relativized
         to *origin*.
         """
+        pass
 
-        return super().to_text(
-            self.name, origin, relativize, self.deleting, **kw  # type: ignore
-        )
-
-    def to_wire(  # type: ignore[override]
-        self,
-        file: Any,
-        compress: Optional[dns.name.CompressType] = None,  # type: ignore
-        origin: Optional[dns.name.Name] = None,
-        **kw: Dict[str, Any],
-    ) -> int:
+    def to_wire(self, file: Any, compress: Optional[dns.name.CompressType]=
+        None, origin: Optional[dns.name.Name]=None, **kw: Dict[str, Any]
+        ) ->int:
         """Convert the RRset to wire format.
 
         All keyword arguments are passed to ``dns.rdataset.to_wire()``; see
@@ -167,32 +101,21 @@ class RRset(dns.rdataset.Rdataset):
 
         Returns an ``int``, the number of records emitted.
         """
+        pass
 
-        return super().to_wire(
-            self.name, file, compress, origin, self.deleting, **kw  # type:ignore
-        )
-
-    # pylint: enable=arguments-differ
-
-    def to_rdataset(self) -> dns.rdataset.Rdataset:
+    def to_rdataset(self) ->dns.rdataset.Rdataset:
         """Convert an RRset into an Rdataset.
 
         Returns a ``dns.rdataset.Rdataset``.
         """
-        return dns.rdataset.from_rdata_list(self.ttl, list(self))
+        pass
 
 
-def from_text_list(
-    name: Union[dns.name.Name, str],
-    ttl: int,
-    rdclass: Union[dns.rdataclass.RdataClass, str],
-    rdtype: Union[dns.rdatatype.RdataType, str],
-    text_rdatas: Collection[str],
-    idna_codec: Optional[dns.name.IDNACodec] = None,
-    origin: Optional[dns.name.Name] = None,
-    relativize: bool = True,
-    relativize_to: Optional[dns.name.Name] = None,
-) -> RRset:
+def from_text_list(name: Union[dns.name.Name, str], ttl: int, rdclass:
+    Union[dns.rdataclass.RdataClass, str], rdtype: Union[dns.rdatatype.
+    RdataType, str], text_rdatas: Collection[str], idna_codec: Optional[dns
+    .name.IDNACodec]=None, origin: Optional[dns.name.Name]=None, relativize:
+    bool=True, relativize_to: Optional[dns.name.Name]=None) ->RRset:
     """Create an RRset with the specified name, TTL, class, and type, and with
     the specified list of rdatas in text format.
 
@@ -210,45 +133,23 @@ def from_text_list(
 
     Returns a ``dns.rrset.RRset`` object.
     """
-
-    if isinstance(name, str):
-        name = dns.name.from_text(name, None, idna_codec=idna_codec)
-    rdclass = dns.rdataclass.RdataClass.make(rdclass)
-    rdtype = dns.rdatatype.RdataType.make(rdtype)
-    r = RRset(name, rdclass, rdtype)
-    r.update_ttl(ttl)
-    for t in text_rdatas:
-        rd = dns.rdata.from_text(
-            r.rdclass, r.rdtype, t, origin, relativize, relativize_to, idna_codec
-        )
-        r.add(rd)
-    return r
+    pass
 
 
-def from_text(
-    name: Union[dns.name.Name, str],
-    ttl: int,
-    rdclass: Union[dns.rdataclass.RdataClass, str],
-    rdtype: Union[dns.rdatatype.RdataType, str],
-    *text_rdatas: Any,
-) -> RRset:
+def from_text(name: Union[dns.name.Name, str], ttl: int, rdclass: Union[dns
+    .rdataclass.RdataClass, str], rdtype: Union[dns.rdatatype.RdataType,
+    str], *text_rdatas: Any) ->RRset:
     """Create an RRset with the specified name, TTL, class, and type and with
     the specified rdatas in text format.
 
     Returns a ``dns.rrset.RRset`` object.
     """
-
-    return from_text_list(
-        name, ttl, rdclass, rdtype, cast(Collection[str], text_rdatas)
-    )
+    pass
 
 
-def from_rdata_list(
-    name: Union[dns.name.Name, str],
-    ttl: int,
-    rdatas: Collection[dns.rdata.Rdata],
-    idna_codec: Optional[dns.name.IDNACodec] = None,
-) -> RRset:
+def from_rdata_list(name: Union[dns.name.Name, str], ttl: int, rdatas:
+    Collection[dns.rdata.Rdata], idna_codec: Optional[dns.name.IDNACodec]=None
+    ) ->RRset:
     """Create an RRset with the specified name and TTL, and with
     the specified list of rdata objects.
 
@@ -259,27 +160,14 @@ def from_rdata_list(
     Returns a ``dns.rrset.RRset`` object.
 
     """
-
-    if isinstance(name, str):
-        name = dns.name.from_text(name, None, idna_codec=idna_codec)
-
-    if len(rdatas) == 0:
-        raise ValueError("rdata list must not be empty")
-    r = None
-    for rd in rdatas:
-        if r is None:
-            r = RRset(name, rd.rdclass, rd.rdtype)
-            r.update_ttl(ttl)
-        r.add(rd)
-    assert r is not None
-    return r
+    pass
 
 
-def from_rdata(name: Union[dns.name.Name, str], ttl: int, *rdatas: Any) -> RRset:
+def from_rdata(name: Union[dns.name.Name, str], ttl: int, *rdatas: Any
+    ) ->RRset:
     """Create an RRset with the specified name and TTL, and with
     the specified rdata objects.
 
     Returns a ``dns.rrset.RRset`` object.
     """
-
-    return from_rdata_list(name, ttl, cast(Collection[dns.rdata.Rdata], rdatas))
+    pass

@@ -1,31 +1,11 @@
-# Copyright (C) Dnspython Contributors, see LICENSE for text of ISC license
-
-# Copyright (C) 2001-2017 Nominum, Inc.
-#
-# Permission to use, copy, modify, and distribute this software and its
-# documentation for any purpose with or without fee is hereby granted,
-# provided that the above copyright notice and this permission notice
-# appear in all copies.
-#
-# THE SOFTWARE IS PROVIDED "AS IS" AND NOMINUM DISCLAIMS ALL WARRANTIES
-# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL NOMINUM BE LIABLE FOR
-# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
-# OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 """DNS Rdata Types."""
-
 from typing import Dict
-
 import dns.enum
 import dns.exception
 
 
 class RdataType(dns.enum.IntEnum):
     """DNS Rdata Type"""
-
     TYPE0 = 0
     NONE = 0
     A = 1
@@ -108,59 +88,19 @@ class RdataType(dns.enum.IntEnum):
     TA = 32768
     DLV = 32769
 
-    @classmethod
-    def _maximum(cls):
-        return 65535
-
-    @classmethod
-    def _short_name(cls):
-        return "type"
-
-    @classmethod
-    def _prefix(cls):
-        return "TYPE"
-
-    @classmethod
-    def _extra_from_text(cls, text):
-        if text.find("-") >= 0:
-            try:
-                return cls[text.replace("-", "_")]
-            except KeyError:
-                pass
-        return _registered_by_text.get(text)
-
-    @classmethod
-    def _extra_to_text(cls, value, current_text):
-        if current_text is None:
-            return _registered_by_value.get(value)
-        if current_text.find("_") >= 0:
-            return current_text.replace("_", "-")
-        return current_text
-
-    @classmethod
-    def _unknown_exception_class(cls):
-        return UnknownRdatatype
-
 
 _registered_by_text: Dict[str, RdataType] = {}
 _registered_by_value: Dict[RdataType, str] = {}
-
 _metatypes = {RdataType.OPT}
-
-_singletons = {
-    RdataType.SOA,
-    RdataType.NXT,
-    RdataType.DNAME,
-    RdataType.NSEC,
-    RdataType.CNAME,
-}
+_singletons = {RdataType.SOA, RdataType.NXT, RdataType.DNAME, RdataType.
+    NSEC, RdataType.CNAME}
 
 
 class UnknownRdatatype(dns.exception.DNSException):
     """DNS resource record type is unknown."""
 
 
-def from_text(text: str) -> RdataType:
+def from_text(text: str) ->RdataType:
     """Convert text into a DNS rdata type value.
 
     The input text can be a defined DNS RR type mnemonic or
@@ -174,11 +114,10 @@ def from_text(text: str) -> RdataType:
 
     Returns a ``dns.rdatatype.RdataType``.
     """
+    pass
 
-    return RdataType.from_text(text)
 
-
-def to_text(value: RdataType) -> str:
+def to_text(value: RdataType) ->str:
     """Convert a DNS rdata type value to text.
 
     If the value has a known mnemonic, it will be used, otherwise the
@@ -188,11 +127,10 @@ def to_text(value: RdataType) -> str:
 
     Returns a ``str``.
     """
+    pass
 
-    return RdataType.to_text(value)
 
-
-def is_metatype(rdtype: RdataType) -> bool:
+def is_metatype(rdtype: RdataType) ->bool:
     """True if the specified type is a metatype.
 
     *rdtype* is a ``dns.rdatatype.RdataType``.
@@ -202,11 +140,10 @@ def is_metatype(rdtype: RdataType) -> bool:
 
     Returns a ``bool``.
     """
+    pass
 
-    return (256 > rdtype >= 128) or rdtype in _metatypes
 
-
-def is_singleton(rdtype: RdataType) -> bool:
+def is_singleton(rdtype: RdataType) ->bool:
     """Is the specified type a singleton type?
 
     Singleton types can only have a single rdata in an rdataset, or a single
@@ -219,16 +156,11 @@ def is_singleton(rdtype: RdataType) -> bool:
 
     Returns a ``bool``.
     """
-
-    if rdtype in _singletons:
-        return True
-    return False
+    pass
 
 
-# pylint: disable=redefined-outer-name
-def register_type(
-    rdtype: RdataType, rdtype_text: str, is_singleton: bool = False
-) -> None:
+def register_type(rdtype: RdataType, rdtype_text: str, is_singleton: bool=False
+    ) ->None:
     """Dynamically register an rdatatype.
 
     *rdtype*, a ``dns.rdatatype.RdataType``, the rdatatype to register.
@@ -238,14 +170,8 @@ def register_type(
     *is_singleton*, a ``bool``, indicating if the type is a singleton (i.e.
     RRsets of the type can have only one member.)
     """
+    pass
 
-    _registered_by_text[rdtype_text] = rdtype
-    _registered_by_value[rdtype] = rdtype_text
-    if is_singleton:
-        _singletons.add(rdtype)
-
-
-### BEGIN generated RdataType constants
 
 TYPE0 = RdataType.TYPE0
 NONE = RdataType.NONE
@@ -328,5 +254,3 @@ AVC = RdataType.AVC
 AMTRELAY = RdataType.AMTRELAY
 TA = RdataType.TA
 DLV = RdataType.DLV
-
-### END generated RdataType constants

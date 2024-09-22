@@ -1,20 +1,3 @@
-# Copyright (C) Dnspython Contributors, see LICENSE for text of ISC license
-
-# Copyright (C) 2003-2017 Nominum, Inc.
-#
-# Permission to use, copy, modify, and distribute this software and its
-# documentation for any purpose with or without fee is hereby granted,
-# provided that the above copyright notice and this permission notice
-# appear in all copies.
-#
-# THE SOFTWARE IS PROVIDED "AS IS" AND NOMINUM DISCLAIMS ALL WARRANTIES
-# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL NOMINUM BE LIABLE FOR
-# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
-# OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 import itertools
 
 
@@ -26,50 +9,38 @@ class Set:
     as these sets are based on lists and are thus indexable, and this
     ability is widely used in dnspython applications.
     """
-
-    __slots__ = ["items"]
+    __slots__ = ['items']
 
     def __init__(self, items=None):
         """Initialize the set.
 
         *items*, an iterable or ``None``, the initial set of items.
         """
-
         self.items = dict()
         if items is not None:
             for item in items:
-                # This is safe for how we use set, but if other code
-                # subclasses it could be a legitimate issue.
-                self.add(item)  # lgtm[py/init-calls-subclass]
+                self.add(item)
 
     def __repr__(self):
-        return "dns.set.Set(%s)" % repr(list(self.items.keys()))
+        return 'dns.set.Set(%s)' % repr(list(self.items.keys()))
 
     def add(self, item):
         """Add an item to the set."""
-
-        if item not in self.items:
-            self.items[item] = None
+        pass
 
     def remove(self, item):
         """Remove an item from the set."""
-
-        try:
-            del self.items[item]
-        except KeyError:
-            raise ValueError
+        pass
 
     def discard(self, item):
         """Remove an item from the set if present."""
-
-        self.items.pop(item, None)
+        pass
 
     def pop(self):
         """Remove an arbitrary item from the set."""
-        (k, _) = self.items.popitem()
-        return k
+        pass
 
-    def _clone(self) -> "Set":
+    def _clone(self) ->'Set':
         """Make a (shallow) copy of the set.
 
         There is a 'clone protocol' that subclasses of this class
@@ -81,87 +52,44 @@ class Set:
         return new instances (e.g. union) once, and keep using them in
         subclasses.
         """
-
-        if hasattr(self, "_clone_class"):
-            cls = self._clone_class  # type: ignore
-        else:
-            cls = self.__class__
-        obj = cls.__new__(cls)
-        obj.items = dict()
-        obj.items.update(self.items)
-        return obj
+        pass
 
     def __copy__(self):
         """Make a (shallow) copy of the set."""
-
         return self._clone()
 
     def copy(self):
         """Make a (shallow) copy of the set."""
-
-        return self._clone()
+        pass
 
     def union_update(self, other):
         """Update the set, adding any elements from other which are not
         already in the set.
         """
-
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        if self is other:  # lgtm[py/comparison-using-is]
-            return
-        for item in other.items:
-            self.add(item)
+        pass
 
     def intersection_update(self, other):
         """Update the set, removing any elements from other which are not
         in both sets.
         """
-
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        if self is other:  # lgtm[py/comparison-using-is]
-            return
-        # we make a copy of the list so that we can remove items from
-        # the list without breaking the iterator.
-        for item in list(self.items):
-            if item not in other.items:
-                del self.items[item]
+        pass
 
     def difference_update(self, other):
         """Update the set, removing any elements from other which are in
         the set.
         """
-
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        if self is other:  # lgtm[py/comparison-using-is]
-            self.items.clear()
-        else:
-            for item in other.items:
-                self.discard(item)
+        pass
 
     def symmetric_difference_update(self, other):
         """Update the set, retaining only elements unique to both sets."""
-
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        if self is other:  # lgtm[py/comparison-using-is]
-            self.items.clear()
-        else:
-            overlap = self.intersection(other)
-            self.union_update(other)
-            self.difference_update(overlap)
+        pass
 
     def union(self, other):
         """Return a new set which is the union of ``self`` and ``other``.
 
         Returns the same Set type as this set.
         """
-
-        obj = self._clone()
-        obj.union_update(other)
-        return obj
+        pass
 
     def intersection(self, other):
         """Return a new set which is the intersection of ``self`` and
@@ -169,10 +97,7 @@ class Set:
 
         Returns the same Set type as this set.
         """
-
-        obj = self._clone()
-        obj.intersection_update(other)
-        return obj
+        pass
 
     def difference(self, other):
         """Return a new set which ``self`` - ``other``, i.e. the items
@@ -180,10 +105,7 @@ class Set:
 
         Returns the same Set type as this set.
         """
-
-        obj = self._clone()
-        obj.difference_update(other)
-        return obj
+        pass
 
     def symmetric_difference(self, other):
         """Return a new set which (``self`` - ``other``) | (``other``
@@ -192,10 +114,7 @@ class Set:
 
         Returns the same Set type as this set.
         """
-
-        obj = self._clone()
-        obj.symmetric_difference_update(other)
-        return obj
+        pass
 
     def __or__(self, other):
         return self.union(other)
@@ -239,13 +158,11 @@ class Set:
         *other*, the collection of items with which to update the set, which
         may be any iterable type.
         """
-
-        for item in other:
-            self.add(item)
+        pass
 
     def clear(self):
         """Make the set empty."""
-        self.items.clear()
+        pass
 
     def __eq__(self, other):
         return self.items == other.items
@@ -277,31 +194,11 @@ class Set:
 
         Returns a ``bool``.
         """
-
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        for item in self.items:
-            if item not in other.items:
-                return False
-        return True
+        pass
 
     def issuperset(self, other):
         """Is this set a superset of *other*?
 
         Returns a ``bool``.
         """
-
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        for item in other.items:
-            if item not in self.items:
-                return False
-        return True
-
-    def isdisjoint(self, other):
-        if not isinstance(other, Set):
-            raise ValueError("other must be a Set instance")
-        for item in other.items:
-            if item in self.items:
-                return False
-        return True
+        pass
