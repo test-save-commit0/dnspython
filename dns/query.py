@@ -165,7 +165,48 @@ def https(q: dns.message.Message, where: str, timeout: Optional[float]=None,
 
     Returns a ``dns.message.Message``.
     """
-    pass
+    if not _have_httpx:
+        raise NoDOH('DNS over HTTPS (DOH) requires httpx')
+
+    if not session:
+        session = httpx.Client(verify=verify)
+
+    wire = q.to_wire()
+    try:
+        if dns.inet.is_address(where):
+            url = f'https://{where}:{port}{path}'
+        else:
+            url = where
+
+        headers = {
+            'accept': 'application/dns-message',
+            'content-type': 'application/dns-message',
+        }
+
+        if post:
+            response = session.post(url, content=wire, headers=headers, timeout=timeout)
+        else:
+            params = {'dns': base64.urlsafe_b64encode(wire).rstrip(b'=').decode()}
+            response = session.get(url, params=params, headers=headers, timeout=timeout)
+
+        response.raise_for_status()
+        r = dns.message.from_wire(response.content,
+                                  keyring=q.keyring,
+                                  request_mac=q.mac,
+                                  one_rr_per_rrset=one_rr_per_rrset,
+                                  ignore_trailing=ignore_trailing)
+        r.time = response.elapsed.total_seconds()
+        if not q.is_response(r):
+            raise BadResponse
+        return r
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 413:
+            raise dns.exception.TooBig
+        elif e.response.status_code == 415:
+            raise dns.exception.UnsupportedMediaType
+        raise
+    except httpx.HTTPError as e:
+        raise dns.exception.Timeout(timeout=timeout) from e
 
 
 def _udp_recv(sock, max_size, expiration):
@@ -173,7 +214,13 @@ def _udp_recv(sock, max_size, expiration):
     A Timeout exception will be raised if the operation is not completed
     by the expiration time.
     """
-    pass
+    while True:
+        try:
+            return sock.recvfrom(max_size)
+        except BlockingIOError:
+            if expiration and time.time() >= expiration:
+                raise dns.exception.Timeout
+        time.sleep(0.01)
 
 
 def _udp_send(sock, data, destination, expiration):
@@ -181,7 +228,13 @@ def _udp_send(sock, data, destination, expiration):
     A Timeout exception will be raised if the operation is not completed
     by the expiration time.
     """
-    pass
+    while True:
+        try:
+            return sock.sendto(data, destination)
+        except BlockingIOError:
+            if expiration and time.time() >= expiration:
+                raise dns.exception.Timeout
+        time.sleep(0.01)
 
 
 def send_udp(sock: Any, what: Union[dns.message.Message, bytes],
@@ -201,7 +254,11 @@ def send_udp(sock: Any, what: Union[dns.message.Message, bytes],
 
     Returns an ``(int, float)`` tuple of bytes sent and the sent time.
     """
-    pass
+    if isinstance(what, dns.message.Message):
+        what = what.to_wire()
+    sent_time = time.time()
+    n = _udp_send(sock, what, destination, expiration)
+    return (n, sent_time)
 
 
 def receive_udp(sock: Any, destination: Optional[Any]=None, expiration:
@@ -258,7 +315,43 @@ def receive_udp(sock: Any, destination: Optional[Any]=None, expiration:
     *ignore_errors* is ``True``, check that the received message is a response
     to this query, and if not keep listening for a valid response.
     """
-    pass
+    while True:
+        try:
+            (wire, from_address) = _udp_recv(sock, 65535, expiration)
+        except dns.exception.Timeout:
+            raise
+        received_time = time.time()
+        if expiration and received_time > expiration:
+            raise dns.exception.Timeout
+        if destination:
+            if not ignore_unexpected and from_address != destination:
+                if not ignore_errors:
+                    raise UnexpectedSource(f'got a response from {from_address} instead of {destination}')
+                else:
+                    continue
+        try:
+            r = dns.message.from_wire(wire, keyring=keyring, request_mac=request_mac,
+                                      one_rr_per_rrset=one_rr_per_rrset,
+                                      ignore_trailing=ignore_trailing)
+        except dns.message.ShortHeader:
+            if not ignore_errors:
+                raise
+            continue
+        except dns.exception.FormError:
+            if not ignore_errors:
+                raise
+            continue
+        if query:
+            if not query.is_response(r):
+                if not ignore_errors:
+                    raise BadResponse
+                continue
+        if r.flags & dns.flags.TC and raise_on_truncation:
+            raise dns.message.Truncated
+        if destination:
+            return (r, received_time)
+        else:
+            return (r, received_time, from_address)
 
 
 def udp(q: dns.message.Message, where: str, timeout: Optional[float]=None,
