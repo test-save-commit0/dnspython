@@ -27,7 +27,9 @@ class GenericPublicKey(ABC):
 
     def to_dnskey(self, flags: int=Flag.ZONE, protocol: int=3) ->DNSKEY:
         """Return public key as DNSKEY"""
-        pass
+        return DNSKEY(dns.rdataclass.IN, dns.rdatatype.DNSKEY,
+                      flags, protocol, self.algorithm.value,
+                      self.encode_key_bytes())
 
     @classmethod
     @abstractmethod
@@ -64,16 +66,16 @@ class GenericPrivateKey(ABC):
     @abstractmethod
     def public_key(self) ->'GenericPublicKey':
         """Return public key instance"""
-        pass
+        raise NotImplementedError("This method must be implemented by subclasses")
 
     @classmethod
     @abstractmethod
     def from_pem(cls, private_pem: bytes, password: Optional[bytes]=None
         ) ->'GenericPrivateKey':
         """Create private key from PEM-encoded PKCS#8"""
-        pass
+        raise NotImplementedError("This method must be implemented by subclasses")
 
     @abstractmethod
     def to_pem(self, password: Optional[bytes]=None) ->bytes:
         """Return private key as PEM-encoded PKCS#8"""
-        pass
+        raise NotImplementedError("This method must be implemented by subclasses")
