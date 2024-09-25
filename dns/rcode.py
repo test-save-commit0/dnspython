@@ -41,7 +41,14 @@ def from_text(text: str) ->Rcode:
 
     Returns a ``dns.rcode.Rcode``.
     """
-    pass
+    try:
+        return Rcode[text.upper()]
+    except KeyError:
+        try:
+            value = int(text)
+            return Rcode(value)
+        except (ValueError, KeyError):
+            raise UnknownRcode(f"Unknown rcode mnemonic: {text}")
 
 
 def from_flags(flags: int, ednsflags: int) ->Rcode:
@@ -55,7 +62,10 @@ def from_flags(flags: int, ednsflags: int) ->Rcode:
 
     Returns a ``dns.rcode.Rcode``.
     """
-    pass
+    rcode = (flags & 0x000f) | ((ednsflags & 0xff0000) >> 4)
+    if rcode < 0 or rcode > 4095:
+        raise ValueError(f"rcode {rcode} is out of range")
+    return Rcode(rcode)
 
 
 def to_flags(value: Rcode) ->Tuple[int, int]:
@@ -67,7 +77,11 @@ def to_flags(value: Rcode) ->Tuple[int, int]:
 
     Returns an ``(int, int)`` tuple.
     """
-    pass
+    if value < 0 or value > 4095:
+        raise ValueError(f"rcode {value} is out of range")
+    flags = value & 0x000f
+    ednsflags = (value & 0xff0) << 4
+    return (flags, ednsflags)
 
 
 def to_text(value: Rcode, tsig: bool=False) ->str:
@@ -79,7 +93,12 @@ def to_text(value: Rcode, tsig: bool=False) ->str:
 
     Returns a ``str``.
     """
-    pass
+    if value < 0 or value > 4095:
+        raise ValueError(f"rcode {value} is out of range")
+    try:
+        return Rcode(value).name
+    except ValueError:
+        return str(value)
 
 
 NOERROR = Rcode.NOERROR
