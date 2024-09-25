@@ -110,6 +110,12 @@ class ECHParam(Param):
         self.ech = dns.rdata.Rdata._as_bytes(ech, True)
 
 
+@dns.immutable.immutable
+class DOHPathParam(Param):
+    def __init__(self, path):
+        self.path = dns.rdata.Rdata._as_bytes(path, True)
+
+
 _class_for_key = {ParamKey.MANDATORY: MandatoryParam, ParamKey.ALPN:
     ALPNParam, ParamKey.NO_DEFAULT_ALPN: NoDefaultALPNParam, ParamKey.PORT:
     PortParam, ParamKey.IPV4HINT: IPv4HintParam, ParamKey.ECH: ECHParam,
