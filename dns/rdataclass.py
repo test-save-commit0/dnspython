@@ -37,7 +37,20 @@ def from_text(text: str) ->RdataClass:
 
     Returns a ``dns.rdataclass.RdataClass``.
     """
-    pass
+    text = text.upper()
+    try:
+        return RdataClass[text]
+    except KeyError:
+        if text.startswith('CLASS'):
+            try:
+                value = int(text[5:])
+                if 0 <= value <= 65535:
+                    return RdataClass(value)
+                else:
+                    raise ValueError("DNS rdata class must be between 0 and 65535")
+            except ValueError:
+                pass
+    raise UnknownRdataclass(f"Unknown DNS class: {text}")
 
 
 def to_text(value: RdataClass) ->str:
@@ -50,7 +63,13 @@ def to_text(value: RdataClass) ->str:
 
     Returns a ``str``.
     """
-    pass
+    if not 0 <= value <= 65535:
+        raise ValueError("DNS rdata class must be between 0 and 65535")
+    
+    try:
+        return RdataClass(value).name
+    except ValueError:
+        return f'CLASS{value}'
 
 
 def is_metaclass(rdclass: RdataClass) ->bool:
@@ -60,7 +79,7 @@ def is_metaclass(rdclass: RdataClass) ->bool:
 
     *rdclass* is a ``dns.rdataclass.RdataClass``.
     """
-    pass
+    return rdclass in _metaclasses
 
 
 RESERVED0 = RdataClass.RESERVED0
