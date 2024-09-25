@@ -74,12 +74,79 @@ class Reader:
 
     def _rr_line(self):
         """Process one line from a DNS zone file."""
-        pass
+        token = self.tok.get()
+        if token.is_whitespace():
+            token = self.tok.get()
+        if token.is_eol():
+            return
+        self.tok.unget(token)
+        
+        (name, ttl, rdclass, rdtype, covers) = self.tok.get_rr_header()
+        if self.force_name is not None:
+            name = self.force_name
+        if self.force_ttl is not None:
+            ttl = self.force_ttl
+        if self.force_rdclass is not None:
+            rdclass = self.force_rdclass
+        if self.force_rdtype is not None:
+            rdtype = self.force_rdtype
+        
+        if name is None:
+            name = self.last_name
+        else:
+            self.last_name = name
+        if ttl is None:
+            ttl = self.last_ttl
+            if ttl is None:
+                ttl = self.default_ttl
+        else:
+            self.last_ttl = ttl
+        if rdclass is None:
+            rdclass = self.zone_rdclass
+        
+        token = self.tok.get()
+        if not token.is_identifier():
+            raise dns.exception.SyntaxError
+        
+        rd = dns.rdata.from_text(rdclass, rdtype, token.value,
+                                 origin=self.current_origin,
+                                 relativize=self.relativize)
+        self.txn.add(name, ttl, rd)
 
     def _generate_line(self):
         """Process one line containing the GENERATE statement from a DNS
         zone file."""
-        pass
+        token = self.tok.get()
+        if not token.is_identifier() or token.value != '$GENERATE':
+            raise dns.exception.SyntaxError
+
+        start = self.tok.get().value
+        stop = self.tok.get().value
+        step = self.tok.get().value
+        pattern = self.tok.get().value
+        ttl = self.default_ttl
+        rdclass = self.zone_rdclass
+        rdtype = None
+        covers = dns.rdatatype.NONE
+
+        token = self.tok.get()
+        if token.is_identifier():
+            rdtype = dns.rdatatype.from_text(token.value)
+            token = self.tok.get()
+            if token.is_identifier():
+                covers = dns.rdatatype.from_text(token.value)
+        
+        if not token.is_eol_or_eof():
+            raise dns.exception.SyntaxError
+
+        for i in dns.grange.from_text(start, stop, step):
+            name = pattern.replace('$', str(i))
+            name = dns.name.from_text(name, self.current_origin)
+            rdata = pattern.replace('$', str(i))
+            rd = dns.rdata.from_text(rdclass, rdtype, rdata,
+                                     origin=self.current_origin,
+                                     relativize=self.relativize)
+            self.txn.add(name, ttl, rd)
 
     def read(self) ->None:
         """Read a DNS zone file and build a zone object.
@@ -87,7 +154,41 @@ class Reader:
         @raises dns.zone.NoSOA: No SOA RR was found at the zone origin
         @raises dns.zone.NoNS: No NS RRset was found at the zone origin
         """
-        pass
+        try:
+            while True:
+                token = self.tok.get(True, True)
+                if token.is_eof():
+                    break
+                if token.is_eol():
+                    continue
+                self.tok.unget(token)
+                if token.value == '$GENERATE':
+                    self._generate_line()
+                elif token.value.startswith('$'):
+                    self._directive_line()
+                else:
+                    self._rr_line()
+        except dns.exception.SyntaxError:
+            raise
+        except Exception as e:
+            raise dns.exception.SyntaxError(f"error reading zone: {e}")
+
+        # Check if SOA and NS records exist at the zone origin
+        has_soa = False
+        has_ns = False
+        for (name, rdataset) in self.txn._iterate_rdatasets():
+            if name == self.zone_origin:
+                if rdataset.rdtype == dns.rdatatype.SOA:
+                    has_soa = True
+                elif rdataset.rdtype == dns.rdatatype.NS:
+                    has_ns = True
+            if has_soa and has_ns:
+                break
+
+        if not has_soa:
+            raise dns.zone.NoSOA
+        if not has_ns:
+            raise dns.zone.NoNS
 
 
 class RRsetsReaderTransaction(dns.transaction.Transaction):
@@ -165,4 +266,37 @@ def read_rrsets(text: Any, name: Optional[Union[dns.name.Name, str]]=None,
     if ``False`` then any relative names in the input are made absolute by
     appending the *origin*.
     """
-    pass
+    if isinstance(text, str):
+        text = StringIO(text)
+    
+    tok = dns.tokenizer.Tokenizer(text, filename='<string>')
+    
+    if isinstance(origin, str):
+        origin = dns.name.from_text(origin, dns.name.root)
+    
+    if isinstance(default_rdclass, str):
+        default_rdclass = dns.rdataclass.from_text(default_rdclass)
+    
+    if isinstance(rdclass, str):
+        rdclass = dns.rdataclass.from_text(rdclass)
+    elif rdclass is None:
+        rdclass = default_rdclass
+    
+    if isinstance(rdtype, str):
+        rdtype = dns.rdatatype.from_text(rdtype)
+    
+    if isinstance(ttl, str):
+        ttl = dns.ttl.from_text(ttl)
+    
+    if isinstance(default_ttl, str):
+        default_ttl = dns.ttl.from_text(default_ttl)
+    
+    manager = RRSetsReaderManager(origin, relativize, rdclass)
+    with manager.transaction(True) as txn:
+        reader = Reader(tok, rdclass, txn, allow_include=False,
+                        allow_directives=False, force_name=name,
+                        force_ttl=ttl, force_rdclass=rdclass,
+                        force_rdtype=rdtype, default_ttl=default_ttl)
+        reader.read()
+    
+    return manager.rrsets
