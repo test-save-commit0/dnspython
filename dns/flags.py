@@ -23,7 +23,10 @@ def from_text(text: str) ->int:
 
     Returns an ``int``
     """
-    pass
+    flags = 0
+    for flag in text.upper().split():
+        flags |= Flag[flag]
+    return flags
 
 
 def to_text(flags: int) ->str:
@@ -32,7 +35,7 @@ def to_text(flags: int) ->str:
 
     Returns a ``str``.
     """
-    pass
+    return ' '.join(flag.name for flag in Flag if flags & flag)
 
 
 def edns_from_text(text: str) ->int:
@@ -41,7 +44,10 @@ def edns_from_text(text: str) ->int:
 
     Returns an ``int``
     """
-    pass
+    flags = 0
+    for flag in text.upper().split():
+        flags |= EDNSFlag[flag]
+    return flags
 
 
 def edns_to_text(flags: int) ->str:
@@ -50,7 +56,7 @@ def edns_to_text(flags: int) ->str:
 
     Returns a ``str``.
     """
-    pass
+    return ' '.join(flag.name for flag in EDNSFlag if flags & flag)
 
 
 QR = Flag.QR
