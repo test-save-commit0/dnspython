@@ -19,7 +19,12 @@ def inet_pton(family: int, text: str) ->bytes:
 
     Returns a ``bytes``.
     """
-    pass
+    if family == AF_INET:
+        return dns.ipv4.inet_aton(text)
+    elif family == AF_INET6:
+        return dns.ipv6.inet_aton(text)
+    else:
+        raise NotImplementedError(f"Address family {family} not supported")
 
 
 def inet_ntop(family: int, address: bytes) ->str:
@@ -34,7 +39,12 @@ def inet_ntop(family: int, address: bytes) ->str:
 
     Returns a ``str``.
     """
-    pass
+    if family == AF_INET:
+        return dns.ipv4.inet_ntoa(address)
+    elif family == AF_INET6:
+        return dns.ipv6.inet_ntoa(address)
+    else:
+        raise NotImplementedError(f"Address family {family} not supported")
 
 
 def af_for_address(text: str) ->int:
@@ -47,7 +57,15 @@ def af_for_address(text: str) ->int:
 
     Returns an ``int``.
     """
-    pass
+    try:
+        dns.ipv4.inet_aton(text)
+        return AF_INET
+    except dns.exception.SyntaxError:
+        try:
+            dns.ipv6.inet_aton(text)
+            return AF_INET6
+        except dns.exception.SyntaxError:
+            raise ValueError(f"Invalid IP address: {text}")
 
 
 def is_multicast(text: str) ->bool:
@@ -60,7 +78,13 @@ def is_multicast(text: str) ->bool:
 
     Returns a ``bool``.
     """
-    pass
+    family = af_for_address(text)
+    if family == AF_INET:
+        return text.startswith('224.') or text.startswith('239.')
+    elif family == AF_INET6:
+        return text.startswith('ff')
+    else:
+        raise ValueError(f"Invalid IP address: {text}")
 
 
 def is_address(text: str) ->bool:
@@ -70,7 +94,11 @@ def is_address(text: str) ->bool:
 
     Returns a ``bool``.
     """
-    pass
+    try:
+        af_for_address(text)
+        return True
+    except ValueError:
+        return False
 
 
 def low_level_address_tuple(high_tuple: Tuple[str, int], af: Optional[int]=None
@@ -83,12 +111,26 @@ def low_level_address_tuple(high_tuple: Tuple[str, int], af: Optional[int]=None
     address in the high-level tuple is valid and has that af.  If af
     is ``None``, then af_for_address will be called.
     """
-    pass
+    address, port = high_tuple
+    if af is None:
+        af = af_for_address(address)
+    
+    if af == AF_INET:
+        return (address, port)
+    elif af == AF_INET6:
+        return (address, port, 0, 0)
+    else:
+        raise ValueError(f"Invalid address family: {af}")
 
 
 def any_for_af(af):
     """Return the 'any' address for the specified address family."""
-    pass
+    if af == AF_INET:
+        return '0.0.0.0'
+    elif af == AF_INET6:
+        return '::'
+    else:
+        raise ValueError(f"Invalid address family: {af}")
 
 
 def canonicalize(text: str) ->str:
@@ -99,4 +141,13 @@ def canonicalize(text: str) ->str:
 
     Raises ``ValueError`` if the text is not valid.
     """
-    pass
+    try:
+        af = af_for_address(text)
+        if af == AF_INET:
+            return dns.ipv4.canonicalize(text)
+        elif af == AF_INET6:
+            if '%' in text:
+                raise ValueError("IPv6 addresses with scopes are not allowed")
+            return dns.ipv6.canonicalize(text)
+    except Exception as e:
+        raise ValueError(f"Invalid IP address: {text}") from e
