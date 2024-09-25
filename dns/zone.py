@@ -156,7 +156,14 @@ class Zone(dns.transaction.TransactionManager):
 
         Returns a ``dns.node.Node``.
         """
-        pass
+        name = self._validate_name(name)
+        node = self.nodes.get(name)
+        if node is None:
+            if not create:
+                raise KeyError(f"Node '{name}' does not exist")
+            node = self.node_factory()
+            self.nodes[name] = node
+        return node
 
     def get_node(self, name: Union[dns.name.Name, str], create: bool=False
         ) ->Optional[dns.node.Node]:
@@ -176,7 +183,10 @@ class Zone(dns.transaction.TransactionManager):
 
         Returns a ``dns.node.Node`` or ``None``.
         """
-        pass
+        try:
+            return self.find_node(name, create)
+        except KeyError:
+            return None
 
     def delete_node(self, name: Union[dns.name.Name, str]) ->None:
         """Delete the specified node if it exists.
@@ -188,7 +198,9 @@ class Zone(dns.transaction.TransactionManager):
 
         It is not an error if the node does not exist.
         """
-        pass
+        name = self._validate_name(name)
+        if name in self.nodes:
+            del self.nodes[name]
 
     def find_rdataset(self, name: Union[dns.name.Name, str], rdtype: Union[
         dns.rdatatype.RdataType, str], covers: Union[dns.rdatatype.
@@ -227,7 +239,17 @@ class Zone(dns.transaction.TransactionManager):
 
         Returns a ``dns.rdataset.Rdataset``.
         """
-        pass
+        node = self.find_node(name, create)
+        rdtype = dns.rdatatype.RdataType.make(rdtype)
+        covers = dns.rdatatype.RdataType.make(covers)
+        for rdataset in node.rdatasets:
+            if rdataset.rdtype == rdtype and rdataset.covers == covers:
+                return rdataset
+        if create:
+            rdataset = dns.rdataset.Rdataset(self.rdclass, rdtype, covers)
+            node.rdatasets.append(rdataset)
+            return rdataset
+        raise KeyError(f"rdataset with rdtype '{rdtype}' and covers '{covers}' does not exist")
 
     def get_rdataset(self, name: Union[dns.name.Name, str], rdtype: Union[
         dns.rdatatype.RdataType, str], covers: Union[dns.rdatatype.
