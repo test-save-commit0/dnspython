@@ -40,7 +40,7 @@ class Option:
         Returns a ``bytes`` or ``None``.
 
         """
-        pass
+        raise NotImplementedError
 
     @classmethod
     def from_wire_parser(cls, otype: OptionType, parser: 'dns.wire.Parser'
@@ -54,14 +54,14 @@ class Option:
 
         Returns a ``dns.edns.Option``.
         """
-        pass
+        raise NotImplementedError
 
     def _cmp(self, other):
         """Compare an EDNS option with another option of the same type.
 
         Returns < 0 if < *other*, 0 if == *other*, and > 0 if > *other*.
         """
-        pass
+        raise NotImplementedError
 
     def __eq__(self, other):
         if not isinstance(other, Option):
@@ -181,7 +181,21 @@ class ECSOption(Option):
         >>> # it understands results from `dns.edns.ECSOption.to_text()`
         >>> dns.edns.ECSOption.from_text('ECS 1.2.3.4/24/32')
         """
-        pass
+        parts = text.split()
+        if parts[0] == 'ECS':
+            parts = parts[1:]
+        if len(parts) != 1:
+            raise dns.exception.SyntaxError('Invalid ECS option format')
+        
+        address_parts = parts[0].split('/')
+        if len(address_parts) < 2 or len(address_parts) > 3:
+            raise dns.exception.SyntaxError('Invalid ECS address format')
+        
+        address = address_parts[0]
+        srclen = int(address_parts[1])
+        scopelen = int(address_parts[2]) if len(address_parts) == 3 else 0
+        
+        return ECSOption(address, srclen, scopelen)
 
 
 class EDECode(dns.enum.IntEnum):
@@ -247,7 +261,7 @@ def get_option_class(otype: OptionType) ->Any:
     The GenericOption class is used if a more specific class is not
     known.
     """
-    pass
+    return _type_to_class.get(otype, GenericOption)
 
 
 def option_from_wire_parser(otype: Union[OptionType, str], parser:
@@ -261,7 +275,9 @@ def option_from_wire_parser(otype: Union[OptionType, str], parser:
 
     Returns an instance of a subclass of ``dns.edns.Option``.
     """
-    pass
+    otype = OptionType.make(otype)
+    cls = get_option_class(otype)
+    return cls.from_wire_parser(otype, parser)
 
 
 def option_from_wire(otype: Union[OptionType, str], wire: bytes, current:
@@ -279,7 +295,11 @@ def option_from_wire(otype: Union[OptionType, str], wire: bytes, current:
 
     Returns an instance of a subclass of ``dns.edns.Option``.
     """
-    pass
+    otype = OptionType.make(otype)
+    cls = get_option_class(otype)
+    parser = dns.wire.Parser(wire, current)
+    with parser.restrict_to(olen):
+        return cls.from_wire_parser(otype, parser)
 
 
 def register_type(implementation: Any, otype: OptionType) ->None:
@@ -289,7 +309,7 @@ def register_type(implementation: Any, otype: OptionType) ->None:
 
     *otype*, an ``int``, is the option type.
     """
-    pass
+    _type_to_class[OptionType.make(otype)] = implementation
 
 
 NSID = OptionType.NSID
