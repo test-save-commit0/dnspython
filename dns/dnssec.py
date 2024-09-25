@@ -44,7 +44,11 @@ def algorithm_from_text(text: str) ->Algorithm:
 
     Returns an ``int``.
     """
-    pass
+    text = text.upper()
+    try:
+        return Algorithm[text]
+    except KeyError:
+        raise dns.exception.SyntaxError(f"Unknown algorithm: {text}")
 
 
 def algorithm_to_text(value: Union[Algorithm, int]) ->str:
@@ -54,12 +58,25 @@ def algorithm_to_text(value: Union[Algorithm, int]) ->str:
 
     Returns a ``str``, the name of a DNSSEC algorithm.
     """
-    pass
+    try:
+        return Algorithm(value).name
+    except ValueError:
+        raise dns.exception.SyntaxError(f"Unknown algorithm: {value}")
 
 
 def to_timestamp(value: Union[datetime, str, float, int]) ->int:
     """Convert various format to a timestamp"""
-    pass
+    if isinstance(value, datetime):
+        return int(value.timestamp())
+    elif isinstance(value, str):
+        try:
+            return int(time.mktime(time.strptime(value, "%Y%m%d%H%M%S")))
+        except ValueError:
+            return int(float(value))
+    elif isinstance(value, (float, int)):
+        return int(value)
+    else:
+        raise ValueError("Unsupported timestamp format")
 
 
 def key_id(key: Union[DNSKEY, CDNSKEY]) ->int:
@@ -69,7 +86,10 @@ def key_id(key: Union[DNSKEY, CDNSKEY]) ->int:
 
     Returns an ``int`` between 0 and 65535
     """
-    pass
+    rdata = dns.rdata.from_text(dns.rdataclass.IN, dns.rdatatype.DNSKEY, 
+                                f"{key.flags} {key.protocol} {key.algorithm} {key.key}")
+    digest = hashlib.sha1(rdata.to_wire()).digest()
+    return (digest[-2] << 8) | digest[-1]
 
 
 class Policy:
@@ -128,7 +148,35 @@ def make_ds(name: Union[dns.name.Name, str], key: dns.rdata.Rdata,
 
     Returns a ``dns.rdtypes.ANY.DS.DS``
     """
-    pass
+    if isinstance(algorithm, str):
+        algorithm = DSDigest[algorithm.upper()]
+    
+    if policy is None:
+        policy = default_policy
+    
+    if validating:
+        if algorithm in policy._deny_validate_ds:
+            raise DeniedByPolicy(f"DS digest algorithm {algorithm} denied by policy")
+    else:
+        if algorithm in policy._deny_create_ds:
+            raise DeniedByPolicy(f"DS digest algorithm {algorithm} denied by policy")
+    
+    if isinstance(name, str):
+        name = dns.name.from_text(name, origin)
+    
+    if algorithm == DSDigest.SHA1:
+        hash_func = hashlib.sha1
+    elif algorithm == DSDigest.SHA256:
+        hash_func = hashlib.sha256
+    elif algorithm == DSDigest.SHA384:
+        hash_func = hashlib.sha384
+    else:
+        raise UnsupportedAlgorithm(f"Unsupported DS digest algorithm: {algorithm}")
+    
+    key_rdata = key.to_wire()
+    digest = hash_func(name.to_wire() + key_rdata).hexdigest()
+    
+    return DS(name, dns.rdataclass.IN, key.key_tag, key.algorithm, algorithm, digest)
 
 
 def make_cds(name: Union[dns.name.Name, str], key: dns.rdata.Rdata,
@@ -152,7 +200,8 @@ def make_cds(name: Union[dns.name.Name, str], key: dns.rdata.Rdata,
 
     Returns a ``dns.rdtypes.ANY.DS.CDS``
     """
-    pass
+    ds = make_ds(name, key, algorithm, origin)
+    return CDS(ds.name, ds.rdclass, ds.key_tag, ds.algorithm, ds.digest_type, ds.digest)
 
 
 def _validate_rrsig(rrset: Union[dns.rrset.RRset, Tuple[dns.name.Name, dns.
