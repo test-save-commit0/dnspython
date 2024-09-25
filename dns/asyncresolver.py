@@ -35,7 +35,17 @@ class Resolver(dns.resolver.BaseResolver):
         documentation of the other parameters, exceptions, and return
         type of this method.
         """
-        pass
+        if isinstance(qname, str):
+            qname = dns.name.from_text(qname)
+        if search is None:
+            search = self.use_search_by_default
+        if search:
+            qname = self._ensure_absolute_name(qname)
+        backend = self._get_backend(backend)
+        request = dns.message.make_query(qname, rdtype, rdclass)
+        answer = await self._resolve_with_cache(request, qname, rdtype, rdclass, tcp, source,
+                                                raise_on_no_answer, source_port, lifetime, backend)
+        return answer
 
     async def resolve_address(self, ipaddr: str, *args: Any, **kwargs: Any
         ) ->dns.resolver.Answer:
@@ -53,7 +63,10 @@ class Resolver(dns.resolver.BaseResolver):
         function.
 
         """
-        pass
+        return await dns.asyncresolver.resolve(dns.reversename.from_address(ipaddr),
+                                               rdtype='PTR',
+                                               *args,
+                                               **kwargs)
 
     async def resolve_name(self, name: Union[dns.name.Name, str], family:
         int=socket.AF_UNSPEC, **kwargs: Any) ->dns.resolver.HostAnswers:
@@ -71,7 +84,26 @@ class Resolver(dns.resolver.BaseResolver):
         except for rdtype and rdclass are also supported by this
         function.
         """
-        pass
+        rdtypes = []
+        if family == socket.AF_INET6:
+            rdtypes.append('AAAA')
+        elif family == socket.AF_INET:
+            rdtypes.append('A')
+        else:
+            rdtypes.extend(['A', 'AAAA'])
+
+        answers = []
+        for rdtype in rdtypes:
+            try:
+                answer = await self.resolve(name, rdtype, **kwargs)
+                answers.append(answer)
+            except dns.resolver.NoAnswer:
+                pass
+
+        if not answers:
+            raise dns.resolver.NoAnswer
+
+        return dns.resolver.HostAnswers(answers)
 
     async def canonical_name(self, name: Union[dns.name.Name, str]
         ) ->dns.name.Name:
@@ -88,7 +120,12 @@ class Resolver(dns.resolver.BaseResolver):
 
         Returns a ``dns.name.Name``.
         """
-        pass
+        try:
+            answer = await self.resolve(name, 'CNAME')
+            cname = answer.canonical_name
+        except dns.resolver.NoAnswer:
+            cname = dns.name.from_text(name) if isinstance(name, str) else name
+        return cname
 
     async def try_ddr(self, lifetime: float=5.0) ->None:
         """Try to update the resolver's nameservers using Discovery of Designated
@@ -109,7 +146,13 @@ class Resolver(dns.resolver.BaseResolver):
         the bootstrap nameserver is in the Subject Alternative Name field of the
         TLS certficate.
         """
-        pass
+        try:
+            ddr = dns._ddr.AsyncDDR(self)
+            nameservers = await ddr.get_nameservers(lifetime)
+            if nameservers:
+                self.nameservers = nameservers
+        except Exception:
+            pass
 
 
 default_resolver = None
@@ -117,7 +160,10 @@ default_resolver = None
 
 def get_default_resolver() ->Resolver:
     """Get the default asynchronous resolver, initializing it if necessary."""
-    pass
+    global default_resolver
+    if default_resolver is None:
+        default_resolver = Resolver()
+    return default_resolver
 
 
 def reset_default_resolver() ->None:
@@ -126,7 +172,8 @@ def reset_default_resolver() ->None:
     Note that the resolver configuration (i.e. /etc/resolv.conf on UNIX
     systems) will be re-read immediately.
     """
-    pass
+    global default_resolver
+    default_resolver = None
 
 
 async def resolve(qname: Union[dns.name.Name, str], rdtype: Union[dns.
@@ -143,7 +190,9 @@ async def resolve(qname: Union[dns.name.Name, str], rdtype: Union[dns.
     See :py:func:`dns.asyncresolver.Resolver.resolve` for more
     information on the parameters.
     """
-    pass
+    return await get_default_resolver().resolve(qname, rdtype, rdclass, tcp, source,
+                                                raise_on_no_answer, source_port, lifetime,
+                                                search, backend)
 
 
 async def resolve_address(ipaddr: str, *args: Any, **kwargs: Any
@@ -153,7 +202,7 @@ async def resolve_address(ipaddr: str, *args: Any, **kwargs: Any
     See :py:func:`dns.asyncresolver.Resolver.resolve_address` for more
     information on the parameters.
     """
-    pass
+    return await get_default_resolver().resolve_address(ipaddr, *args, **kwargs)
 
 
 async def resolve_name(name: Union[dns.name.Name, str], family: int=socket.
@@ -163,7 +212,7 @@ async def resolve_name(name: Union[dns.name.Name, str], family: int=socket.
     See :py:func:`dns.asyncresolver.Resolver.resolve_name` for more
     information on the parameters.
     """
-    pass
+    return await get_default_resolver().resolve_name(name, family, **kwargs)
 
 
 async def canonical_name(name: Union[dns.name.Name, str]) ->dns.name.Name:
@@ -172,7 +221,7 @@ async def canonical_name(name: Union[dns.name.Name, str]) ->dns.name.Name:
     See :py:func:`dns.resolver.Resolver.canonical_name` for more
     information on the parameters and possible exceptions.
     """
-    pass
+    return await get_default_resolver().canonical_name(name)
 
 
 async def try_ddr(timeout: float=5.0) ->None:
@@ -182,7 +231,7 @@ async def try_ddr(timeout: float=5.0) ->None:
 
     See :py:func:`dns.resolver.Resolver.try_ddr` for more information.
     """
-    pass
+    await get_default_resolver().try_ddr(timeout)
 
 
 async def zone_for_name(name: Union[dns.name.Name, str], rdclass: dns.
@@ -194,7 +243,9 @@ async def zone_for_name(name: Union[dns.name.Name, str], rdclass: dns.
     See :py:func:`dns.resolver.Resolver.zone_for_name` for more
     information on the parameters and possible exceptions.
     """
-    pass
+    if resolver is None:
+        resolver = get_default_resolver()
+    return await resolver.zone_for_name(name, rdclass, tcp, backend)
 
 
 async def make_resolver_at(where: Union[dns.name.Name, str], port: int=53,
@@ -217,7 +268,22 @@ async def make_resolver_at(where: Union[dns.name.Name, str], port: int=53,
 
     Returns a ``dns.resolver.Resolver`` or raises an exception.
     """
-    pass
+    if resolver is None:
+        resolver = get_default_resolver()
+    
+    if isinstance(where, str):
+        where = dns.name.from_text(where)
+    
+    if isinstance(where, dns.name.Name):
+        addresses = await resolver.resolve_name(where, family)
+        address = addresses[0].address
+    else:
+        address = where
+    
+    r = Resolver()
+    r.nameservers = [address]
+    r.port = port
+    return r
 
 
 async def resolve_at(where: Union[dns.name.Name, str], qname: Union[dns.
@@ -241,4 +307,6 @@ async def resolve_at(where: Union[dns.name.Name, str], qname: Union[dns.
     ``dns.asyncresolver.make_resolver_at()`` and then use that resolver for the queries
     instead of calling ``resolve_at()`` multiple times.
     """
-    pass
+    r = await make_resolver_at(where, port, family, resolver)
+    return await r.resolve(qname, rdtype, rdclass, tcp, source, raise_on_no_answer,
+                           source_port, lifetime, search, backend)
