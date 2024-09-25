@@ -24,7 +24,10 @@ def from_text(text: str) ->Opcode:
 
     Returns an ``int``.
     """
-    pass
+    try:
+        return Opcode[text.upper()]
+    except KeyError:
+        raise UnknownOpcode(f"Unknown opcode: {text}")
 
 
 def from_flags(flags: int) ->Opcode:
@@ -34,7 +37,7 @@ def from_flags(flags: int) ->Opcode:
 
     Returns an ``int``.
     """
-    pass
+    return Opcode((flags >> 11) & 0xF)
 
 
 def to_flags(value: Opcode) ->int:
@@ -45,7 +48,7 @@ def to_flags(value: Opcode) ->int:
 
     Returns an ``int``.
     """
-    pass
+    return int(value) << 11
 
 
 def to_text(value: Opcode) ->str:
@@ -57,7 +60,10 @@ def to_text(value: Opcode) ->str:
 
     Returns a ``str``.
     """
-    pass
+    try:
+        return Opcode(value).name
+    except ValueError:
+        raise UnknownOpcode(f"Unknown opcode: {value}")
 
 
 def is_update(flags: int) ->bool:
@@ -67,7 +73,7 @@ def is_update(flags: int) ->bool:
 
     Returns a ``bool``.
     """
-    pass
+    return from_flags(flags) == Opcode.UPDATE
 
 
 QUERY = Opcode.QUERY
