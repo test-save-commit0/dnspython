@@ -10,10 +10,10 @@ import dns.query
 class Nameserver:
 
     def __init__(self):
-        pass
+        self.type = "Generic Nameserver"
 
     def __str__(self):
-        raise NotImplementedError
+        return f"<{self.type}>"
 
 
 class AddressAndPortNameserver(Nameserver):
@@ -32,6 +32,10 @@ class Do53Nameserver(AddressAndPortNameserver):
 
     def __init__(self, address: str, port: int=53):
         super().__init__(address, port)
+        self.type = "DNS-over-UDP/TCP"
+
+    def kind(self):
+        return "do53"
 
 
 class DoHNameserver(Nameserver):
@@ -55,6 +59,10 @@ class DoTNameserver(AddressAndPortNameserver):
         super().__init__(address, port)
         self.hostname = hostname
         self.verify = verify
+        self.type = "DNS-over-TLS"
+
+    def kind(self):
+        return "dot"
 
 
 class DoQNameserver(AddressAndPortNameserver):
@@ -64,3 +72,7 @@ class DoQNameserver(AddressAndPortNameserver):
         super().__init__(address, port)
         self.verify = verify
         self.server_hostname = server_hostname
+        self.type = "DNS-over-QUIC"
+
+    def kind(self):
+        return "doq"
