@@ -114,7 +114,21 @@ def from_text(text: str) ->RdataType:
 
     Returns a ``dns.rdatatype.RdataType``.
     """
-    pass
+    text = text.upper()
+    if text.startswith('TYPE'):
+        try:
+            value = int(text[4:])
+            if 0 <= value <= 65535:
+                return RdataType(value)
+            else:
+                raise ValueError("Rdata type value must be between 0 and 65535")
+        except ValueError:
+            raise UnknownRdatatype(f"Unknown rdatatype: {text}")
+    
+    try:
+        return RdataType[text]
+    except KeyError:
+        raise UnknownRdatatype(f"Unknown rdatatype: {text}")
 
 
 def to_text(value: RdataType) ->str:
@@ -127,7 +141,16 @@ def to_text(value: RdataType) ->str:
 
     Returns a ``str``.
     """
-    pass
+    if not isinstance(value, RdataType):
+        value = RdataType(value)
+    
+    if 0 <= value <= 65535:
+        try:
+            return _registered_by_value[value]
+        except KeyError:
+            return f'TYPE{value}'
+    else:
+        raise ValueError("Rdata type value must be between 0 and 65535")
 
 
 def is_metatype(rdtype: RdataType) ->bool:
@@ -140,7 +163,9 @@ def is_metatype(rdtype: RdataType) ->bool:
 
     Returns a ``bool``.
     """
-    pass
+    return rdtype in {RdataType.TKEY, RdataType.TSIG, RdataType.IXFR, 
+                      RdataType.AXFR, RdataType.MAILA, RdataType.MAILB, 
+                      RdataType.ANY, RdataType.OPT}
 
 
 def is_singleton(rdtype: RdataType) ->bool:
@@ -156,7 +181,7 @@ def is_singleton(rdtype: RdataType) ->bool:
 
     Returns a ``bool``.
     """
-    pass
+    return rdtype in _singletons
 
 
 def register_type(rdtype: RdataType, rdtype_text: str, is_singleton: bool=False
@@ -170,7 +195,11 @@ def register_type(rdtype: RdataType, rdtype_text: str, is_singleton: bool=False
     *is_singleton*, a ``bool``, indicating if the type is a singleton (i.e.
     RRsets of the type can have only one member.)
     """
-    pass
+    rdtype_text = rdtype_text.upper()
+    _registered_by_text[rdtype_text] = rdtype
+    _registered_by_value[rdtype] = rdtype_text
+    if is_singleton:
+        _singletons.add(rdtype)
 
 
 TYPE0 = RdataType.TYPE0
