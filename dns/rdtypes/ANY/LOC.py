@@ -48,9 +48,39 @@ class LOC(dns.rdata.Rdata):
     @property
     def float_latitude(self):
         """latitude as a floating point value"""
-        pass
+        return _tuple_to_float(self.latitude)
 
     @property
     def float_longitude(self):
         """longitude as a floating point value"""
-        pass
+        return _tuple_to_float(self.longitude)
+
+def _tuple_to_float(tuple_coord):
+    """Convert a coordinate tuple to a float value."""
+    degrees, minutes, seconds, milliseconds = tuple_coord
+    return degrees + (minutes / 60.0) + (seconds / 3600.0) + (milliseconds / 3600000.0)
+
+def _float_to_tuple(float_coord):
+    """Convert a float coordinate to a tuple."""
+    degrees = int(float_coord)
+    minutes = int((float_coord - degrees) * 60)
+    seconds = int(((float_coord - degrees) * 60 - minutes) * 60)
+    milliseconds = int((((float_coord - degrees) * 60 - minutes) * 60 - seconds) * 1000)
+    return (degrees, minutes, seconds, milliseconds)
+
+def _check_coordinate_list(coordinate, low, high):
+    """Check if the coordinate is within the specified range."""
+    if len(coordinate) != 4:
+        raise dns.exception.SyntaxError('LOC coordinate must be a 4-tuple')
+    for i in range(4):
+        if not isinstance(coordinate[i], int):
+            raise dns.exception.SyntaxError('LOC coordinate must be integers')
+    degrees, minutes, seconds, milliseconds = coordinate
+    if degrees < low or degrees > high:
+        raise dns.exception.SyntaxError(f'LOC degrees must be between {low} and {high}')
+    if minutes < 0 or minutes > 59:
+        raise dns.exception.SyntaxError('LOC minutes must be between 0 and 59')
+    if seconds < 0 or seconds > 59:
+        raise dns.exception.SyntaxError('LOC seconds must be between 0 and 59')
+    if milliseconds < 0 or milliseconds > 999:
+        raise dns.exception.SyntaxError('LOC milliseconds must be between 0 and 999')
