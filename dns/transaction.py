@@ -101,14 +101,19 @@ class Transaction:
 
         Note that the returned rdataset is immutable.
         """
-        pass
+        self._check_ended()
+        name = dns.name.from_text(name) if isinstance(name, str) else name
+        rdtype = dns.rdatatype.RdataType.make(rdtype)
+        covers = dns.rdatatype.RdataType.make(covers)
+        return self._get_rdataset(name, rdtype, covers)
 
     def get_node(self, name: dns.name.Name) ->Optional[dns.node.Node]:
         """Return the node at *name*, if any.
 
         Returns an immutable node or ``None``.
         """
-        pass
+        self._check_ended()
+        return self._get_node(name)
 
     def add(self, *args: Any) ->None:
         """Add records.
@@ -121,7 +126,28 @@ class Transaction:
 
             - name, ttl, rdata...
         """
-        pass
+        self._check_ended()
+        if self.read_only:
+            raise ReadOnly
+
+        if len(args) == 1:
+            rrset = args[0]
+            self._put_rdataset(rrset.name, rrset)
+        elif len(args) == 2:
+            name, rdataset = args
+            self._put_rdataset(name, rdataset)
+        elif len(args) >= 3:
+            name, ttl = args[:2]
+            if isinstance(name, str):
+                name = dns.name.from_text(name, None)
+            rdtype = args[2]
+            if isinstance(rdtype, str):
+                rdtype = dns.rdatatype.from_text(rdtype)
+            rdata = args[3:]
+            rdataset = dns.rdataset.from_rdata_list(ttl, rdata)
+            self._put_rdataset(name, rdataset)
+        else:
+            raise ValueError("add() requires at least one argument")
 
     def replace(self, *args: Any) ->None:
         """Replace the existing rdataset at the name with the specified
@@ -140,7 +166,31 @@ class Transaction:
         a delete of the name followed by one or more calls to add() or
         replace().
         """
-        pass
+        self._check_ended()
+        if self.read_only:
+            raise ReadOnly
+
+        if len(args) == 1:
+            rrset = args[0]
+            self._delete_rdataset(rrset.name, rrset.rdtype, rrset.covers)
+            self._put_rdataset(rrset.name, rrset)
+        elif len(args) == 2:
+            name, rdataset = args
+            self._delete_rdataset(name, rdataset.rdtype, rdataset.covers)
+            self._put_rdataset(name, rdataset)
+        elif len(args) >= 3:
+            name, ttl = args[:2]
+            if isinstance(name, str):
+                name = dns.name.from_text(name, None)
+            rdtype = args[2]
+            if isinstance(rdtype, str):
+                rdtype = dns.rdatatype.from_text(rdtype)
+            rdata = args[3:]
+            rdataset = dns.rdataset.from_rdata_list(ttl, rdata)
+            self._delete_rdataset(name, rdtype, dns.rdatatype.NONE)
+            self._put_rdataset(name, rdataset)
+        else:
+            raise ValueError("replace() requires at least one argument")
 
     def delete(self, *args: Any) ->None:
         """Delete records.
@@ -160,7 +210,35 @@ class Transaction:
 
             - name, rdata...
         """
-        pass
+        self._check_ended()
+        if self.read_only:
+            raise ReadOnly
+
+        if len(args) == 1:
+            arg = args[0]
+            if isinstance(arg, dns.rrset.RRset):
+                self._delete_rdataset(arg.name, arg.rdtype, arg.covers)
+            else:
+                self._delete_name(arg)
+        elif len(args) == 2:
+            name, rdataset = args
+            self._delete_rdataset(name, rdataset.rdtype, rdataset.covers)
+        elif len(args) >= 3:
+            name = args[0]
+            if isinstance(name, str):
+                name = dns.name.from_text(name, None)
+            rdtype = args[1]
+            if isinstance(rdtype, str):
+                rdtype = dns.rdatatype.from_text(rdtype)
+            if len(args) == 3:
+                covers = args[2]
+                if isinstance(covers, str):
+                    covers = dns.rdatatype.from_text(covers)
+            else:
+                covers = dns.rdatatype.NONE
+            self._delete_rdataset(name, rdtype, covers)
+        else:
+            raise ValueError("delete() requires at least one argument")
 
     def delete_exact(self, *args: Any) ->None:
         """Delete records.
