@@ -56,7 +56,12 @@ class Rdataset(dns.set.Set):
 
         *ttl*, an ``int`` or ``str``.
         """
-        pass
+        if isinstance(ttl, str):
+            ttl = dns.ttl.from_text(ttl)
+        if len(self) == 0:
+            self.ttl = ttl
+        else:
+            self.ttl = min(self.ttl, ttl)
 
     def add(self, rd: dns.rdata.Rdata, ttl: Optional[int]=None) ->None:
         """Add the specified rdata to the rdataset.
@@ -74,7 +79,20 @@ class Rdataset(dns.set.Set):
         Raises ``dns.rdataset.DifferingCovers`` if the type is a signature
         type and the covered type does not match that of the rdataset.
         """
-        pass
+        if ttl is not None:
+            self.update_ttl(ttl)
+
+        if self.rdclass != rd.rdclass or self.rdtype != rd.rdtype:
+            raise IncompatibleTypes
+
+        if dns.rdatatype.is_singleton(self.rdtype) and len(self) > 0:
+            self.clear()
+
+        if self.rdtype == dns.rdatatype.RRSIG:
+            if rd.covers != self.covers:
+                raise DifferingCovers
+
+        super().add(rd)
 
     def update(self, other):
         """Add all rdatas in other to self.
@@ -82,7 +100,15 @@ class Rdataset(dns.set.Set):
         *other*, a ``dns.rdataset.Rdataset``, the rdataset from which
         to update.
         """
-        pass
+        if self.rdclass != other.rdclass or self.rdtype != other.rdtype:
+            raise IncompatibleTypes
+
+        if other.covers != self.covers:
+            raise DifferingCovers
+
+        self.update_ttl(other.ttl)
+        for rd in other:
+            self.add(rd)
 
     def __repr__(self):
         if self.covers == 0:
@@ -135,7 +161,17 @@ class Rdataset(dns.set.Set):
         *want_comments*, a ``bool``.  If ``True``, emit comments for rdata
         which have them.  The default is ``False``.
         """
-        pass
+        rdclass = self.rdclass if override_rdclass is None else override_rdclass
+        result = []
+        for rd in self:
+            if name is not None:
+                result.append(f"{name.choose_relativity(origin, relativize)} ")
+            result.append(f"{self.ttl} {dns.rdataclass.to_text(rdclass)} {dns.rdatatype.to_text(self.rdtype)} ")
+            result.append(rd.to_text(origin=origin, relativize=relativize, **kw))
+            if want_comments and rd.rdcomment:
+                result.append(f" ; {rd.rdcomment}")
+            result.append("\n")
+        return "".join(result)
 
     def to_wire(self, name: dns.name.Name, file: Any, compress: Optional[
         dns.name.CompressType]=None, origin: Optional[dns.name.Name]=None,
@@ -164,14 +200,28 @@ class Rdataset(dns.set.Set):
 
         Returns an ``int``, the number of records emitted.
         """
-        pass
+        rdclass = self.rdclass if override_rdclass is None else override_rdclass
+        rdatas = list(self)
+        if want_shuffle:
+            random.shuffle(rdatas)
+        
+        count = 0
+        for rd in rdatas:
+            name.to_wire(file, compress, origin)
+            file.write(struct.pack("!HHI", rdclass, self.rdtype, self.ttl))
+            rd.to_wire(file, compress, origin)
+            count += 1
+        
+        return count
 
     def match(self, rdclass: dns.rdataclass.RdataClass, rdtype: dns.
         rdatatype.RdataType, covers: dns.rdatatype.RdataType) ->bool:
         """Returns ``True`` if this rdataset matches the specified class,
         type, and covers.
         """
-        pass
+        return (self.rdclass == rdclass and
+                self.rdtype == rdtype and
+                self.covers == covers)
 
     def processing_order(self) ->List[dns.rdata.Rdata]:
         """Return rdatas in a valid processing order according to the type's
@@ -182,7 +232,23 @@ class Rdataset(dns.set.Set):
         For types that do not define a processing order, the rdatas are
         simply shuffled.
         """
-        pass
+        rdatas = list(self)
+        if self.rdtype == dns.rdatatype.MX:
+            def key_func(rdata):
+                return rdata.preference
+            rdatas.sort(key=key_func)
+            
+            # Group and shuffle rdatas with the same preference
+            from itertools import groupby
+            shuffled = []
+            for _, group in groupby(rdatas, key=key_func):
+                group_list = list(group)
+                random.shuffle(group_list)
+                shuffled.extend(group_list)
+            return shuffled
+        else:
+            random.shuffle(rdatas)
+            return rdatas
 
 
 @dns.immutable.immutable
