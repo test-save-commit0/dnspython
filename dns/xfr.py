@@ -74,7 +74,49 @@ class Inbound:
 
         Returns `True` if the transfer is complete, and `False` otherwise.
         """
-        pass
+        if message.rcode() != dns.rcode.NOERROR:
+            raise TransferError(message.rcode())
+
+        if self.done:
+            return True
+
+        for rrset in message.answer:
+            if rrset.rdtype == dns.rdatatype.SOA:
+                self._process_soa(rrset)
+            else:
+                self._process_rrset(rrset)
+
+        if self.done:
+            if self.txn:
+                self.txn.commit()
+            return True
+        return False
+
+    def _process_soa(self, rrset):
+        if self.soa_rdataset is None:
+            self.soa_rdataset = rrset
+            if self.txn is None:
+                self.txn = self.txn_manager.writer()
+            if self.rdtype == dns.rdatatype.IXFR:
+                if dns.serial.Serial(rrset[0].serial) <= dns.serial.Serial(self.serial):
+                    raise SerialWentBackwards()
+                self.delete_mode = True
+            self.txn.replace(self.origin, rrset)
+        elif self.expecting_SOA:
+            self.expecting_SOA = False
+            if self.rdtype == dns.rdatatype.IXFR:
+                self.delete_mode = not self.delete_mode
+        else:
+            self.done = True
+
+    def _process_rrset(self, rrset):
+        if self.txn is None:
+            self.txn = self.txn_manager.writer()
+        if self.delete_mode:
+            self.txn.delete(rrset.name, rrset)
+        else:
+            self.txn.add(rrset.name, rrset)
+        self.expecting_SOA = True
 
     def __enter__(self):
         return self
@@ -111,7 +153,34 @@ def make_query(txn_manager: dns.transaction.TransactionManager, serial:
 
     Returns a `(query, serial)` tuple.
     """
-    pass
+    rdtype = dns.rdatatype.AXFR
+    current_serial = None
+    origin, _, _ = txn_manager.origin_information()
+
+    if serial is not None:
+        rdtype = dns.rdatatype.IXFR
+        if serial == 0:
+            with txn_manager.reader() as txn:
+                try:
+                    current_serial = txn.get(origin, dns.rdatatype.SOA)[0].serial
+                except KeyError:
+                    rdtype = dns.rdatatype.AXFR
+        else:
+            current_serial = serial
+
+    query = dns.message.make_query(origin, rdtype, use_edns=use_edns,
+                                   ednsflags=ednsflags, payload=payload,
+                                   request_payload=request_payload,
+                                   options=options)
+
+    if rdtype == dns.rdatatype.IXFR:
+        query.authority = [dns.rrset.from_text(origin, 0, 'IN', 'SOA',
+                                               f'{origin} 0 0 0 0 0 {current_serial}')]
+
+    if keyring is not None:
+        query.use_tsig(keyring, keyname, algorithm=keyalgorithm)
+
+    return query, current_serial
 
 
 def extract_serial_from_query(query: dns.message.Message) ->Optional[int]:
@@ -123,4 +192,24 @@ def extract_serial_from_query(query: dns.message.Message) ->Optional[int]:
     Raises if the query is not an IXFR or AXFR, or if an IXFR doesn't have
     an appropriate SOA RRset in the authority section.
     """
-    pass
+    if not isinstance(query, dns.message.QueryMessage):
+        raise ValueError("query must be a dns.message.QueryMessage")
+
+    if len(query.question) != 1:
+        raise ValueError("query must have exactly one question")
+
+    qname, qtype, _ = query.question[0]
+
+    if qtype == dns.rdatatype.AXFR:
+        return None
+    elif qtype == dns.rdatatype.IXFR:
+        if len(query.authority) != 1:
+            raise ValueError("IXFR query must have exactly one SOA in the authority section")
+
+        rrset = query.authority[0]
+        if rrset.rdtype != dns.rdatatype.SOA:
+            raise ValueError("IXFR authority section must contain an SOA record")
+
+        return rrset[0].serial
+    else:
+        raise ValueError("query must be an IXFR or AXFR request")
