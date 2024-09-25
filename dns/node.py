@@ -53,7 +53,10 @@ class Node:
         Returns a ``str``.
 
         """
-        pass
+        lines = []
+        for rdataset in self.rdatasets:
+            lines.append(rdataset.to_text(name, **kw))
+        return '\n'.join(lines)
 
     def __repr__(self):
         return '<DNS node ' + str(id(self)) + '>'
@@ -85,7 +88,17 @@ class Node:
         RRSIGs are deleted.  If the rdataset being appended has
         ``NodeKind.REGULAR`` then CNAME and RRSIG(CNAME) are deleted.
         """
-        pass
+        if rdataset.rdtype in _cname_types:
+            # Remove all rdatasets except KEY, NSEC, NSEC3, and their RRSIGs
+            self.rdatasets = [rds for rds in self.rdatasets if rds.rdtype in _neutral_types or
+                              (rds.rdtype == dns.rdatatype.RRSIG and
+                               rds.covers in _neutral_types)]
+        elif rdataset.rdtype not in _neutral_types:
+            # Remove CNAME and RRSIG(CNAME)
+            self.rdatasets = [rds for rds in self.rdatasets if rds.rdtype not in _cname_types and
+                              not (rds.rdtype == dns.rdatatype.RRSIG and
+                                   rds.covers in _cname_types)]
+        self.rdatasets.append(rdataset)
 
     def find_rdataset(self, rdclass: dns.rdataclass.RdataClass, rdtype: dns
         .rdatatype.RdataType, covers: dns.rdatatype.RdataType=dns.rdatatype
@@ -114,7 +127,15 @@ class Node:
 
         Returns a ``dns.rdataset.Rdataset``.
         """
-        pass
+        for rds in self.rdatasets:
+            if rds.rdclass == rdclass and rds.rdtype == rdtype and rds.covers == covers:
+                return rds
+        if create:
+            rds = dns.rdataset.Rdataset(rdclass, rdtype)
+            rds.covers = covers
+            self._append_rdataset(rds)
+            return rds
+        raise KeyError
 
     def get_rdataset(self, rdclass: dns.rdataclass.RdataClass, rdtype: dns.
         rdatatype.RdataType, covers: dns.rdatatype.RdataType=dns.rdatatype.
@@ -142,7 +163,10 @@ class Node:
 
         Returns a ``dns.rdataset.Rdataset`` or ``None``.
         """
-        pass
+        try:
+            return self.find_rdataset(rdclass, rdtype, covers, create)
+        except KeyError:
+            return None
 
     def delete_rdataset(self, rdclass: dns.rdataclass.RdataClass, rdtype:
         dns.rdatatype.RdataType, covers: dns.rdatatype.RdataType=dns.
@@ -158,7 +182,8 @@ class Node:
 
         *covers*, an ``int``, the covered type.
         """
-        pass
+        self.rdatasets = [rds for rds in self.rdatasets if not (
+            rds.rdclass == rdclass and rds.rdtype == rdtype and rds.covers == covers)]
 
     def replace_rdataset(self, replacement: dns.rdataset.Rdataset) ->None:
         """Replace an rdataset.
@@ -174,7 +199,11 @@ class Node:
         Raises ``ValueError`` if *replacement* is not a
         ``dns.rdataset.Rdataset``.
         """
-        pass
+        if not isinstance(replacement, dns.rdataset.Rdataset):
+            raise ValueError("replacement must be a dns.rdataset.Rdataset")
+        
+        self.delete_rdataset(replacement.rdclass, replacement.rdtype, replacement.covers)
+        self._append_rdataset(replacement)
 
     def classify(self) ->NodeKind:
         """Classify a node.
@@ -191,7 +220,22 @@ class Node:
         or a neutral type is a a ``NodeKind.REGULAR`` node.  Regular nodes are
         also commonly referred to as "other data".
         """
-        pass
+        has_cname = False
+        has_regular = False
+        
+        for rdataset in self.rdatasets:
+            if rdataset.rdtype in _cname_types:
+                has_cname = True
+            elif rdataset.rdtype not in _neutral_types:
+                if rdataset.rdtype != dns.rdatatype.RRSIG or rdataset.covers not in _neutral_types:
+                    has_regular = True
+        
+        if has_cname:
+            return NodeKind.CNAME
+        elif has_regular:
+            return NodeKind.REGULAR
+        else:
+            return NodeKind.NEUTRAL
 
 
 @dns.immutable.immutable
