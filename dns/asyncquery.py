@@ -41,7 +41,11 @@ async def send_udp(sock: dns.asyncbackend.DatagramSocket, what: Union[dns.
 
     Returns an ``(int, float)`` tuple of bytes sent and the sent time.
     """
-    pass
+    if isinstance(what, dns.message.Message):
+        what = what.to_wire()
+    sent_time = time.time()
+    n = await sock.sendto(what, destination)
+    return (n, sent_time)
 
 
 async def receive_udp(sock: dns.asyncbackend.DatagramSocket, destination:
@@ -61,7 +65,20 @@ async def receive_udp(sock: dns.asyncbackend.DatagramSocket, destination:
     Returns a ``(dns.message.Message, float, tuple)`` tuple of the received message, the
     received time, and the address where the message arrived from.
     """
-    pass
+    wire, from_address = await sock.recvfrom(65535)
+    received_time = time.time()
+    r = dns.message.from_wire(wire, keyring=keyring, request_mac=request_mac,
+                              one_rr_per_rrset=one_rr_per_rrset,
+                              ignore_trailing=ignore_trailing,
+                              raise_on_truncation=raise_on_truncation,
+                              ignore_errors=ignore_errors)
+    if not query:
+        return (r, received_time, from_address)
+    if not _matches_destination(query, from_address, destination, ignore_unexpected):
+        if not ignore_unexpected:
+            raise dns.exception.FormError("got a response from the wrong server")
+        return (None, received_time, from_address)
+    return (r, received_time, from_address)
 
 
 async def udp(q: dns.message.Message, where: str, timeout: Optional[float]=
@@ -84,7 +101,28 @@ async def udp(q: dns.message.Message, where: str, timeout: Optional[float]=
     See :py:func:`dns.query.udp()` for the documentation of the other
     parameters, exceptions, and return type of this method.
     """
-    pass
+    wire = q.to_wire()
+    (begin_time, expiration) = _compute_times(timeout)
+    af = dns.inet.af_for_address(where)
+    destination = _lltuple((where, port), af)
+    if sock:
+        cm: contextlib.AbstractAsyncContextManager = NullContext(sock)
+    else:
+        cm = dns.asyncbackend.make_socket(af, socket.SOCK_DGRAM, 0, backend=backend,
+                                          source=source, source_port=source_port)
+    async with cm as s:
+        await send_udp(s, wire, destination, expiration)
+        (r, _, _) = await receive_udp(s, destination, expiration,
+                                      ignore_unexpected=ignore_unexpected,
+                                      one_rr_per_rrset=one_rr_per_rrset,
+                                      ignore_trailing=ignore_trailing,
+                                      raise_on_truncation=raise_on_truncation,
+                                      ignore_errors=ignore_errors,
+                                      query=q)
+    r.time = time.time() - begin_time
+    if not q.is_response(r):
+        raise BadResponse
+    return r
 
 
 async def udp_with_fallback(q: dns.message.Message, where: str, timeout:
@@ -114,7 +152,17 @@ async def udp_with_fallback(q: dns.message.Message, where: str, timeout:
     of the other parameters, exceptions, and return type of this
     method.
     """
-    pass
+    try:
+        response = await udp(q, where, timeout, port, source, source_port,
+                             ignore_unexpected, one_rr_per_rrset,
+                             ignore_trailing, True, udp_sock, backend,
+                             ignore_errors)
+        return (response, False)
+    except dns.message.Truncated:
+        response = await tcp(q, where, timeout, port, source, source_port,
+                             one_rr_per_rrset, ignore_trailing, tcp_sock,
+                             backend)
+        return (response, True)
 
 
 async def send_tcp(sock: dns.asyncbackend.StreamSocket, what: Union[dns.
@@ -127,14 +175,30 @@ async def send_tcp(sock: dns.asyncbackend.StreamSocket, what: Union[dns.
     See :py:func:`dns.query.send_tcp()` for the documentation of the other
     parameters, exceptions, and return type of this method.
     """
-    pass
+    if isinstance(what, dns.message.Message):
+        wire = what.to_wire()
+    else:
+        wire = what
+    l = len(wire)
+    # converting to bytes for Python 3 compatibility
+    tcpmsg = struct.pack("!H", l) + wire
+    sent_time = time.time()
+    await sock.sendall(tcpmsg, expiration)
+    return (len(tcpmsg), sent_time)
 
 
 async def _read_exactly(sock, count, expiration):
     """Read the specified number of bytes from stream.  Keep trying until we
     either get the desired amount, or we hit EOF.
     """
-    pass
+    s = b''
+    while count > 0:
+        n = await sock.recv(count, expiration)
+        if n == b'':
+            raise EOFError
+        count -= len(n)
+        s += n
+    return s
 
 
 async def receive_tcp(sock: dns.asyncbackend.StreamSocket, expiration:
@@ -148,7 +212,14 @@ async def receive_tcp(sock: dns.asyncbackend.StreamSocket, expiration:
     See :py:func:`dns.query.receive_tcp()` for the documentation of the other
     parameters, exceptions, and return type of this method.
     """
-    pass
+    ldata = await _read_exactly(sock, 2, expiration)
+    (l,) = struct.unpack("!H", ldata)
+    wire = await _read_exactly(sock, l, expiration)
+    received_time = time.time()
+    r = dns.message.from_wire(wire, keyring=keyring, request_mac=request_mac,
+                              one_rr_per_rrset=one_rr_per_rrset,
+                              ignore_trailing=ignore_trailing)
+    return (r, received_time)
 
 
 async def tcp(q: dns.message.Message, where: str, timeout: Optional[float]=
@@ -169,7 +240,23 @@ async def tcp(q: dns.message.Message, where: str, timeout: Optional[float]=
     See :py:func:`dns.query.tcp()` for the documentation of the other
     parameters, exceptions, and return type of this method.
     """
-    pass
+    wire = q.to_wire()
+    (begin_time, expiration) = _compute_times(timeout)
+    af = dns.inet.af_for_address(where)
+    if sock:
+        cm: contextlib.AbstractAsyncContextManager = NullContext(sock)
+    else:
+        cm = dns.asyncbackend.make_socket(af, socket.SOCK_STREAM, 0, backend=backend,
+                                          source=source, source_port=source_port)
+    async with cm as s:
+        await s.connect((where, port), expiration)
+        await send_tcp(s, wire, expiration)
+        (r, received_time) = await receive_tcp(s, expiration, one_rr_per_rrset,
+                                               q.keyring, q.mac, ignore_trailing)
+    r.time = received_time - begin_time
+    if not q.is_response(r):
+        raise BadResponse
+    return r
 
 
 async def tls(q: dns.message.Message, where: str, timeout: Optional[float]=
