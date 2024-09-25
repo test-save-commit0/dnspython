@@ -21,7 +21,17 @@ def from_e164(text: str, origin: Optional[dns.name.Name]=public_enum_domain
 
     Returns a ``dns.name.Name``.
     """
-    pass
+    digits = ''.join(filter(str.isdigit, text))
+    if not digits:
+        raise dns.exception.SyntaxError("No digits found in E.164 number")
+    
+    labels = list(reversed(digits))
+    name = dns.name.Name(labels)
+    
+    if origin is not None:
+        name = name.derelativize(origin)
+    
+    return name
 
 
 def to_e164(name: dns.name.Name, origin: Optional[dns.name.Name]=
@@ -45,7 +55,15 @@ def to_e164(name: dns.name.Name, origin: Optional[dns.name.Name]=
     Returns a ``str``.
 
     """
-    pass
+    if origin is not None:
+        name = name.relativize(origin)
+    
+    digits = ''.join(reversed(name.labels))
+    
+    if want_plus_prefix:
+        return '+' + digits
+    else:
+        return digits
 
 
 def query(number: str, domains: Iterable[Union[dns.name.Name, str]],
@@ -61,4 +79,19 @@ def query(number: str, domains: Iterable[Union[dns.name.Name, str]],
     *resolver*, a ``dns.resolver.Resolver``, is the resolver to use.  If
     ``None``, the default resolver is used.
     """
-    pass
+    if resolver is None:
+        resolver = dns.resolver.get_default_resolver()
+    
+    for domain in domains:
+        if isinstance(domain, str):
+            domain = dns.name.from_text(domain)
+        
+        e164_name = from_e164(number, domain)
+        
+        try:
+            answer = resolver.resolve(e164_name, 'NAPTR')
+            return answer
+        except dns.resolver.NXDOMAIN:
+            continue
+    
+    raise dns.resolver.NXDOMAIN(f"No NAPTR records found for {number} in the specified domains")
