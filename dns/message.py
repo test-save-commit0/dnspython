@@ -62,7 +62,7 @@ class Truncated(dns.exception.DNSException):
 
         Returns a ``dns.message.Message``.
         """
-        pass
+        return self.kwargs.get('message')
 
 
 class NotQueryResponse(dns.exception.DNSException):
@@ -132,22 +132,22 @@ class Message:
     @property
     def question(self) ->List[dns.rrset.RRset]:
         """The question section."""
-        pass
+        return self.sections[0]
 
     @property
     def answer(self) ->List[dns.rrset.RRset]:
         """The answer section."""
-        pass
+        return self.sections[1]
 
     @property
     def authority(self) ->List[dns.rrset.RRset]:
         """The authority section."""
-        pass
+        return self.sections[2]
 
     @property
     def additional(self) ->List[dns.rrset.RRset]:
         """The additional data section."""
-        pass
+        return self.sections[3]
 
     def __repr__(self):
         return '<DNS message, ID ' + repr(self.id) + '>'
@@ -164,7 +164,17 @@ class Message:
 
         Returns a ``str``.
         """
-        pass
+        s = io.StringIO()
+        s.write(f"id {self.id}\n")
+        s.write(f"opcode {dns.opcode.to_text(self.opcode())}\n")
+        s.write(f"rcode {dns.rcode.to_text(self.rcode())}\n")
+        s.write(f"flags {dns.flags.to_text(self.flags)}\n")
+        for i, section in enumerate(self.sections):
+            s.write(f";{self._section_enum.to_text(i)}:\n")
+            for rrset in section:
+                s.write(rrset.to_text(origin, relativize, **kw))
+                s.write("\n")
+        return s.getvalue()
 
     def __eq__(self, other):
         """Two messages are equal if they have the same content in the
@@ -197,7 +207,9 @@ class Message:
 
         Returns a ``bool``.
         """
-        pass
+        return (self.id == other.id and
+                self.opcode() == other.opcode() and
+                (other.flags & dns.flags.QR) != 0)
 
     def section_number(self, section: List[dns.rrset.RRset]) ->int:
         """Return the "section number" of the specified section for use
@@ -209,7 +221,10 @@ class Message:
 
         Returns an ``int``.
         """
-        pass
+        for i, s in enumerate(self.sections):
+            if section is s:
+                return i
+        raise ValueError('unknown section')
 
     def section_from_number(self, number: int) ->List[dns.rrset.RRset]:
         """Return the section list associated with the specified section
@@ -222,7 +237,12 @@ class Message:
 
         Returns a ``list``.
         """
-        pass
+        if isinstance(number, str):
+            number = self._section_enum.from_text(number)
+        try:
+            return self.sections[number]
+        except IndexError:
+            raise ValueError('invalid section')
 
     def find_rrset(self, section: SectionType, name: dns.name.Name, rdclass:
         dns.rdataclass.RdataClass, rdtype: dns.rdatatype.RdataType, covers:
