@@ -18,7 +18,16 @@ def get_backend(name: str) ->Backend:
 
     Raises NotImplementedError if an unknown backend name is specified.
     """
-    pass
+    if name not in _backends:
+        if name == 'trio':
+            from dns import _trio_backend
+            _backends['trio'] = _trio_backend.Backend()
+        elif name == 'asyncio':
+            from dns import _asyncio_backend
+            _backends['asyncio'] = _asyncio_backend.Backend()
+        else:
+            raise NotImplementedError(f"Unknown backend '{name}'")
+    return _backends[name]
 
 
 def sniff() ->str:
@@ -28,12 +37,33 @@ def sniff() ->str:
     Returns the name of the library, or raises AsyncLibraryNotFoundError
     if the library cannot be determined.
     """
-    pass
+    global _no_sniffio
+    if _no_sniffio:
+        raise AsyncLibraryNotFoundError("sniffio module not available")
+    try:
+        import sniffio
+        library = sniffio.current_async_library()
+        if library == 'trio':
+            return 'trio'
+        elif library == 'asyncio':
+            return 'asyncio'
+        else:
+            raise AsyncLibraryNotFoundError(f"Unsupported async library: {library}")
+    except ImportError:
+        _no_sniffio = True
+        raise AsyncLibraryNotFoundError("sniffio module not available")
 
 
 def get_default_backend() ->Backend:
     """Get the default backend, initializing it if necessary."""
-    pass
+    global _default_backend
+    if _default_backend is None:
+        try:
+            name = sniff()
+        except AsyncLibraryNotFoundError:
+            name = 'asyncio'  # Default to asyncio if sniffio fails
+        _default_backend = get_backend(name)
+    return _default_backend
 
 
 def set_default_backend(name: str) ->Backend:
@@ -45,4 +75,6 @@ def set_default_backend(name: str) ->Backend:
     in testing situations, this function allows the backend to be set
     explicitly.
     """
-    pass
+    global _default_backend
+    _default_backend = get_backend(name)
+    return _default_backend
