@@ -23,6 +23,19 @@ class DatagramSocket(dns._asyncbackend.DatagramSocket):
         self.transport = transport
         self.protocol = protocol
 
+    async def sendto(self, what, destination, timeout):
+        self.transport.sendto(what, destination)
+
+    async def recvfrom(self, size, timeout):
+        self.protocol.recvfrom = asyncio.Future()
+        try:
+            return await asyncio.wait_for(self.protocol.recvfrom, timeout)
+        except asyncio.TimeoutError:
+            raise dns.exception.Timeout
+
+    async def close(self):
+        self.transport.close()
+
 
 class StreamSocket(dns._asyncbackend.StreamSocket):
 
@@ -30,6 +43,20 @@ class StreamSocket(dns._asyncbackend.StreamSocket):
         self.family = af
         self.reader = reader
         self.writer = writer
+
+    async def sendall(self, what, timeout):
+        self.writer.write(what)
+        await asyncio.wait_for(self.writer.drain(), timeout)
+
+    async def recv(self, size, timeout):
+        try:
+            return await asyncio.wait_for(self.reader.read(size), timeout)
+        except asyncio.TimeoutError:
+            raise dns.exception.Timeout
+
+    async def close(self):
+        self.writer.close()
+        await self.writer.wait_closed()
 
 
 if dns._features.have('doh'):
@@ -71,4 +98,39 @@ else:
 
 
 class Backend(dns._asyncbackend.Backend):
-    pass
+    async def make_socket(self, af, socktype, proto=0, source=None, destination=None,
+                          timeout=None, ssl_context=None, server_hostname=None):
+        if socktype == socket.SOCK_DGRAM:
+            transport, protocol = await asyncio.get_event_loop().create_datagram_endpoint(
+                lambda: _DatagramProtocol(),
+                local_addr=source,
+                remote_addr=destination,
+                family=af,
+                proto=proto
+            )
+            return DatagramSocket(af, transport, protocol)
+        elif socktype == socket.SOCK_STREAM:
+            if destination is None:
+                raise ValueError("destination required for stream sockets")
+            host, port = destination
+            if timeout is not None:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port, ssl=ssl_context, 
+                                            server_hostname=server_hostname),
+                    timeout
+                )
+            else:
+                reader, writer = await asyncio.open_connection(host, port, ssl=ssl_context, 
+                                                               server_hostname=server_hostname)
+            return StreamSocket(af, reader, writer)
+        else:
+            raise NotImplementedError(f"unsupported socket type {socktype}")
+
+    async def sleep(self, interval):
+        await asyncio.sleep(interval)
+
+    def datagram_connection_required(self):
+        return not _is_win32
+
+    def get_transport_class(self):
+        return _HTTPTransport
