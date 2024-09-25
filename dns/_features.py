@@ -11,7 +11,12 @@ def _version_check(requirement: str) ->bool:
 
         package>=version
     """
-    pass
+    package, version = requirement.split('>=')
+    try:
+        installed_version = importlib.metadata.version(package)
+        return installed_version >= version
+    except importlib.metadata.PackageNotFoundError:
+        return False
 
 
 _cache: Dict[str, bool] = {}
@@ -27,7 +32,15 @@ def have(feature: str) ->bool:
     and ``False`` if it is not or if metadata is
     missing.
     """
-    pass
+    if feature in _cache:
+        return _cache[feature]
+    
+    if feature not in _requirements:
+        return False
+    
+    result = all(_version_check(req) for req in _requirements[feature])
+    _cache[feature] = result
+    return result
 
 
 def force(feature: str, enabled: bool) ->None:
@@ -36,7 +49,7 @@ def force(feature: str, enabled: bool) ->None:
     This method is provided as a workaround for any cases
     where importlib.metadata is ineffective, or for testing.
     """
-    pass
+    _cache[feature] = enabled
 
 
 _requirements: Dict[str, List[str]] = {'dnssec': ['cryptography>=41'],
