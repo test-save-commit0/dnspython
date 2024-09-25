@@ -113,7 +113,7 @@ class ECHParam(Param):
 _class_for_key = {ParamKey.MANDATORY: MandatoryParam, ParamKey.ALPN:
     ALPNParam, ParamKey.NO_DEFAULT_ALPN: NoDefaultALPNParam, ParamKey.PORT:
     PortParam, ParamKey.IPV4HINT: IPv4HintParam, ParamKey.ECH: ECHParam,
-    ParamKey.IPV6HINT: IPv6HintParam}
+    ParamKey.IPV6HINT: IPv6HintParam, ParamKey.DOHPATH: DOHPathParam}
 
 
 @dns.immutable.immutable
