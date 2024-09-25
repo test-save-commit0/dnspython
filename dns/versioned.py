@@ -67,7 +67,12 @@ class Zone(dns.zone.Zone):
         """Set a pruning policy that retains up to the specified number
         of versions
         """
-        pass
+        if max_versions is None:
+            self._pruning_policy = self._default_pruning_policy
+        else:
+            def max_versions_policy(zone: 'Zone', version: Version) -> Optional[bool]:
+                return len(zone._versions) > max_versions
+            self._pruning_policy = max_versions_policy
 
     def set_pruning_policy(self, policy: Optional[Callable[['Zone', Version
         ], Optional[bool]]]) ->None:
@@ -82,4 +87,7 @@ class Zone(dns.zone.Zone):
         time the function returns `False`, the checking stops.  I.e. the
         retained versions are always a consecutive sequence.
         """
-        pass
+        if policy is None:
+            self._pruning_policy = self._default_pruning_policy
+        else:
+            self._pruning_policy = policy
