@@ -99,7 +99,9 @@ def _escapify(label: Union[bytes, str]) ->str:
     """Escape the characters in label which need it.
     @returns: the escaped string
     @rtype: string"""
-    pass
+    if isinstance(label, bytes):
+        label = label.decode('ascii')
+    return ''.join(('\\' + c if c in _escaped_text else c) for c in label)
 
 
 class IDNACodec:
@@ -186,7 +188,14 @@ def _validate_labels(labels: Tuple[bytes, ...]) ->None:
     sequence
 
     """
-    pass
+    total_length = sum(len(label) for label in labels) + len(labels)
+    if total_length > 255:
+        raise NameTooLong
+    for i, label in enumerate(labels):
+        if len(label) > 63:
+            raise LabelTooLong
+        if len(label) == 0 and i != len(labels) - 1:
+            raise EmptyLabel
 
 
 def _maybe_convert_to_binary(label: Union[bytes, str]) ->bytes:
@@ -194,7 +203,9 @@ def _maybe_convert_to_binary(label: Union[bytes, str]) ->bytes:
     ``bytes`` just return it.
 
     """
-    pass
+    if isinstance(label, str):
+        return label.encode('ascii')
+    return label
 
 
 @dns.immutable.immutable
@@ -231,14 +242,14 @@ class Name:
 
         Returns a ``bool``.
         """
-        pass
+        return len(self.labels) > 0 and self.labels[-1] == b''
 
     def is_wild(self) ->bool:
         """Is this name wild?  (I.e. Is the least significant label '*'?)
 
         Returns a ``bool``.
         """
-        pass
+        return len(self.labels) > 0 and self.labels[0] == b'*'
 
     def __hash__(self) ->int:
         """Return a case-insensitive hash of the name.
@@ -282,7 +293,32 @@ class Name:
         example1.      example2       none         > 0    0
         =============  =============  ===========  =====  =======
         """
-        pass
+        sabs = self.is_absolute()
+        oabs = other.is_absolute()
+        if sabs != oabs:
+            if sabs:
+                return (NameRelation.NONE, 1, 0)
+            else:
+                return (NameRelation.NONE, -1, 0)
+        
+        la = len(self.labels)
+        lo = len(other.labels)
+        l = min(la, lo)
+        
+        for i in range(l):
+            sa = self.labels[la - i - 1].lower()
+            so = other.labels[lo - i - 1].lower()
+            if sa < so:
+                return (NameRelation.NONE, -1, i)
+            elif sa > so:
+                return (NameRelation.NONE, 1, i)
+        
+        if la == lo:
+            return (NameRelation.EQUAL, 0, l)
+        elif la > lo:
+            return (NameRelation.SUBDOMAIN, 1, l)
+        else:
+            return (NameRelation.SUPERDOMAIN, -1, l)
 
     def is_subdomain(self, other: 'Name') ->bool:
         """Is self a subdomain of other?
