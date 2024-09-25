@@ -128,7 +128,17 @@ class Tokenizer:
 
     def _get_char(self) ->str:
         """Read a character from input."""
-        pass
+        if self.ungotten_char is not None:
+            c = self.ungotten_char
+            self.ungotten_char = None
+        else:
+            c = self.file.read(1)
+            if c == '\n':
+                self.line_number += 1
+            elif c == '':
+                self.eof = True
+                self.file.close()
+        return c
 
     def where(self) ->Tuple[str, int]:
         """Return the current location in the input.
@@ -136,7 +146,7 @@ class Tokenizer:
         Returns a (string, int) tuple.  The first item is the filename of
         the input, the second is the current line number.
         """
-        pass
+        return (self.filename, self.line_number)
 
     def _unget_char(self, c: str) ->None:
         """Unget a character.
@@ -148,7 +158,11 @@ class Tokenizer:
         c: the character to unget
         raises UngetBufferFull: there is already an ungotten char
         """
-        pass
+        if self.ungotten_char is not None:
+            raise UngetBufferFull
+        self.ungotten_char = c
+        if c == '\n':
+            self.line_number -= 1
 
     def skip_whitespace(self) ->int:
         """Consume input until a non-whitespace character is encountered.
@@ -160,7 +174,17 @@ class Tokenizer:
 
         Returns the number of characters skipped.
         """
-        pass
+        skipped = 0
+        while True:
+            c = self._get_char()
+            if c == '' or c not in (' ', '\t', '\r', '\n'):
+                if c != '':
+                    self._unget_char(c)
+                return skipped
+            if c == '\n' and self.multiline == 0:
+                self._unget_char(c)
+                return skipped
+            skipped += 1
 
     def get(self, want_leading: bool=False, want_comment: bool=False) ->Token:
         """Get the next token.
@@ -177,7 +201,76 @@ class Tokenizer:
 
         Returns a Token.
         """
-        pass
+        if self.ungotten_token is not None:
+            token = self.ungotten_token
+            self.ungotten_token = None
+            return token
+        
+        skipped = self.skip_whitespace()
+        if want_leading and skipped > 0:
+            return Token(WHITESPACE, ' ' * skipped)
+        
+        token = self._get_token()
+        if token.ttype == COMMENT and not want_comment:
+            return self.get(want_leading, want_comment)
+        
+        return token
+
+    def _get_token(self) ->Token:
+        c = self._get_char()
+        if c == '':
+            return Token(EOF)
+        elif c == '\n':
+            return Token(EOL)
+        elif c in self.delimiters:
+            if c == '"':
+                return self._get_quoted_string()
+            elif c == '(':
+                self.multiline += 1
+            elif c == ')':
+                self.multiline = max(0, self.multiline - 1)
+            elif c == ';':
+                return self._get_comment()
+            return Token(DELIMITER, c)
+        else:
+            return self._get_identifier(c)
+
+    def _get_quoted_string(self) ->Token:
+        value = ''
+        while True:
+            c = self._get_char()
+            if c == '':
+                raise dns.exception.SyntaxError('Unexpected end of input in quoted string')
+            if c == '"':
+                break
+            if c == '\\':
+                c = self._get_char()
+                if c == '':
+                    raise dns.exception.SyntaxError('Unexpected end of input in quoted string')
+            value += c
+        return Token(QUOTED_STRING, value, True)
+
+    def _get_comment(self) ->Token:
+        comment = ''
+        while True:
+            c = self._get_char()
+            if c == '' or c == '\n':
+                if c == '\n':
+                    self._unget_char(c)
+                break
+            comment += c
+        return Token(COMMENT, comment)
+
+    def _get_identifier(self, initial: str) ->Token:
+        value = initial
+        while True:
+            c = self._get_char()
+            if c == '' or c in self.delimiters:
+                if c != '':
+                    self._unget_char(c)
+                break
+            value += c
+        return Token(IDENTIFIER, value)
 
     def unget(self, token: Token) ->None:
         """Unget a token.
@@ -190,14 +283,16 @@ class Tokenizer:
 
         Raises UngetBufferFull: there is already an ungotten token
         """
-        pass
+        if self.ungotten_token is not None:
+            raise UngetBufferFull
+        self.ungotten_token = token
 
     def next(self):
         """Return the next item in an iteration.
 
         Returns a Token.
         """
-        pass
+        return self.get()
     __next__ = next
 
     def __iter__(self):
@@ -210,7 +305,13 @@ class Tokenizer:
 
         Returns an int.
         """
-        pass
+        token = self.get()
+        if token.ttype != IDENTIFIER:
+            raise dns.exception.SyntaxError('Expected an identifier')
+        try:
+            return int(token.value, base)
+        except ValueError:
+            raise dns.exception.SyntaxError('Invalid integer')
 
     def get_uint8(self) ->int:
         """Read the next token and interpret it as an 8-bit unsigned
@@ -220,7 +321,10 @@ class Tokenizer:
 
         Returns an int.
         """
-        pass
+        value = self.get_int()
+        if value < 0 or value > 255:
+            raise dns.exception.SyntaxError('Invalid 8-bit unsigned integer')
+        return value
 
     def get_uint16(self, base: int=10) ->int:
         """Read the next token and interpret it as a 16-bit unsigned
@@ -230,7 +334,10 @@ class Tokenizer:
 
         Returns an int.
         """
-        pass
+        value = self.get_int(base)
+        if value < 0 or value > 65535:
+            raise dns.exception.SyntaxError('Invalid 16-bit unsigned integer')
+        return value
 
     def get_uint32(self, base: int=10) ->int:
         """Read the next token and interpret it as a 32-bit unsigned
@@ -240,7 +347,10 @@ class Tokenizer:
 
         Returns an int.
         """
-        pass
+        value = self.get_int(base)
+        if value < 0 or value > 4294967295:
+            raise dns.exception.SyntaxError('Invalid 32-bit unsigned integer')
+        return value
 
     def get_uint48(self, base: int=10) ->int:
         """Read the next token and interpret it as a 48-bit unsigned
@@ -250,7 +360,10 @@ class Tokenizer:
 
         Returns an int.
         """
-        pass
+        value = self.get_int(base)
+        if value < 0 or value > 281474976710655:
+            raise dns.exception.SyntaxError('Invalid 48-bit unsigned integer')
+        return value
 
     def get_string(self, max_length: Optional[int]=None) ->str:
         """Read the next token and interpret it as a string.
@@ -261,7 +374,12 @@ class Tokenizer:
 
         Returns a string.
         """
-        pass
+        token = self.get()
+        if token.ttype not in (IDENTIFIER, QUOTED_STRING):
+            raise dns.exception.SyntaxError('Expected a string')
+        if max_length is not None and len(token.value) > max_length:
+            raise dns.exception.SyntaxError('String length exceeds maximum')
+        return token.value
 
     def get_identifier(self) ->str:
         """Read the next token, which should be an identifier.
@@ -270,7 +388,10 @@ class Tokenizer:
 
         Returns a string.
         """
-        pass
+        token = self.get()
+        if token.ttype != IDENTIFIER:
+            raise dns.exception.SyntaxError('Expected an identifier')
+        return token.value
 
     def get_remaining(self, max_tokens: Optional[int]=None) ->List[Token]:
         """Return the remaining tokens on the line, until an EOL or EOF is seen.
@@ -279,7 +400,16 @@ class Tokenizer:
 
         Returns a list of tokens.
         """
-        pass
+        tokens = []
+        while True:
+            token = self.get()
+            if token.ttype in (EOL, EOF):
+                self.unget(token)
+                break
+            tokens.append(token)
+            if max_tokens is not None and len(tokens) >= max_tokens:
+                break
+        return tokens
 
     def concatenate_remaining_identifiers(self, allow_empty: bool=False) ->str:
         """Read the remaining tokens on the line, which should be identifiers.
@@ -293,7 +423,15 @@ class Tokenizer:
         Returns a string containing a concatenation of the remaining
         identifiers.
         """
-        pass
+        tokens = self.get_remaining()
+        if not tokens and not allow_empty:
+            raise dns.exception.SyntaxError('No remaining identifiers')
+        result = ''
+        for token in tokens:
+            if token.ttype != IDENTIFIER:
+                raise dns.exception.SyntaxError('Expected an identifier')
+            result += token.value
+        return result
 
     def as_name(self, token: Token, origin: Optional[dns.name.Name]=None,
         relativize: bool=False, relativize_to: Optional[dns.name.Name]=None
@@ -304,7 +442,15 @@ class Tokenizer:
 
         Returns a dns.name.Name.
         """
-        pass
+        if token.ttype != IDENTIFIER:
+            raise dns.exception.SyntaxError('Expected a name')
+        try:
+            name = dns.name.from_text(token.value, origin, self.idna_codec)
+            if relativize:
+                name = name.relativize(relativize_to or origin)
+            return name
+        except dns.exception.DNSException:
+            raise dns.exception.SyntaxError('Invalid name')
 
     def get_name(self, origin: Optional[dns.name.Name]=None, relativize:
         bool=False, relativize_to: Optional[dns.name.Name]=None
@@ -315,7 +461,8 @@ class Tokenizer:
 
         Returns a dns.name.Name.
         """
-        pass
+        token = self.get()
+        return self.as_name(token, origin, relativize, relativize_to)
 
     def get_eol_as_token(self) ->Token:
         """Read the next token and raise an exception if it isn't EOL or
@@ -323,7 +470,10 @@ class Tokenizer:
 
         Returns a string.
         """
-        pass
+        token = self.get()
+        if token.ttype not in (EOL, EOF):
+            raise dns.exception.SyntaxError('Expected EOL or EOF')
+        return token
 
     def get_ttl(self) ->int:
         """Read the next token and interpret it as a DNS TTL.
@@ -333,4 +483,10 @@ class Tokenizer:
 
         Returns an int.
         """
-        pass
+        token = self.get()
+        if token.ttype != IDENTIFIER:
+            raise dns.exception.SyntaxError('Expected a TTL')
+        try:
+            return dns.ttl.from_text(token.value)
+        except dns.ttl.BadTTL:
+            raise dns.exception.SyntaxError('Invalid TTL')
