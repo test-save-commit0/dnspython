@@ -43,4 +43,13 @@ def constify(o: Any) ->Any:
     """
     Convert mutable types to immutable types.
     """
-    pass
+    if isinstance(o, (str, int, float, bool, type(None))):
+        return o
+    elif isinstance(o, dict):
+        return Dict({k: constify(v) for k, v in o.items()})
+    elif isinstance(o, (list, tuple)):
+        return tuple(constify(item) for item in o)
+    elif isinstance(o, set):
+        return frozenset(constify(item) for item in o)
+    else:
+        return o  # If it's not a known mutable type, return as is
